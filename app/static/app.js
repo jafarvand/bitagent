@@ -17,7 +17,13 @@ function setMode(status) {
   $("mode-pill").textContent = `${status.mode} mode`;
   $("mode-pill").className = `pill ${status.mode === "live" ? "good" : "warn"}`;
   $("system-state").textContent = status.mode === "live" ? "Live API" : "Safe preview";
-  $("policy-summary").textContent = `${status.access_control_mode} mode · pilot role header`;
+}
+
+function renderReadiness(payload) {
+  $("replay-summary").textContent = `${payload.replay.passed}/${payload.replay.total} cases · ${payload.replay.accuracy_percent}%`;
+  $("security-summary").textContent = `${payload.security.passed}/${payload.security.total} checks · ${payload.security.refusal_percent}% refusal`;
+  $("readiness-summary").textContent = `${payload.uat.passed}/${payload.uat.total} gates · ${payload.uat.decision.replaceAll("_", " ")}`;
+  $("readiness-summary").className = payload.uat.decision === "ready_for_controlled_uat" ? "" : "error";
 }
 
 function renderDashboard(payload) {
@@ -74,10 +80,12 @@ function renderFeatures(payload) {
 }
 
 function renderAudit(payload) {
-  $("audit-summary").textContent = payload.valid
+  const node = $("audit-summary");
+  if (!node) return;
+  node.textContent = payload.valid
     ? `${payload.records} records · chain valid`
     : `Integrity failure at record ${payload.failed_at_id}`;
-  $("audit-summary").className = payload.valid ? "" : "error";
+  node.className = payload.valid ? "" : "error";
 }
 
 function renderTrends(payload) {
@@ -144,14 +152,15 @@ async function load() {
   try {
     const market = $("market").value.trim().toUpperCase();
     const days = $("days").value;
-    const [status, dashboard, features, audit, trends, investigation, brief] = await Promise.all([
+    const [status, dashboard, features, audit, trends, investigation, brief, readiness] = await Promise.all([
       json("/api/v0/status"),
       json(`/api/v0/dashboard?market=${encodeURIComponent(market)}&days=${days}`),
       json("/api/v0/features"),
       json("/api/v0/audit/verify"),
       json("/api/v0/trends?limit=30"),
       json("/api/v0/investigations/withdrawal-slowdown"),
-      json("/api/v0/briefs/daily")
+      json("/api/v0/briefs/daily"),
+      json("/api/v0/readiness")
     ]);
     setMode(status);
     renderDashboard(dashboard);
@@ -160,6 +169,7 @@ async function load() {
     renderTrends(trends);
     renderInvestigation(investigation);
     renderExecutiveBrief(brief);
+    renderReadiness(readiness);
   } catch (error) {
     $("system-state").textContent = "Connection error";
     $("system-state").className = "error";

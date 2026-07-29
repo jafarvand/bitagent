@@ -25,7 +25,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.8.0"
+    assert response.json()["version"] == "0.9.0"
 
 
 def test_dashboard_mock_contract():
@@ -140,7 +140,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "0.8.0",
+        "version": "0.9.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -187,6 +187,37 @@ def test_access_decisions_are_audited(monkeypatch):
     assert len(audit["items"]) >= 2
     assert any(item["allowed"] is False for item in audit["items"])
     assert all(item["decision_hash"] for item in audit["items"])
+
+
+def test_replay_suite_validates_six_severity_cases():
+    replay = client.get(
+        "/api/v0/evaluations/replay",
+        headers={"X-BitAgent-Role": "auditor"},
+    ).json()
+
+    assert replay["total"] == 6
+    assert replay["passed"] == 6
+    assert replay["accuracy_percent"] == 100
+    assert replay["all_passed"] is True
+    assert all(case["action_executed"] is False for case in replay["cases"])
+    assert replay["fixture_classification"] == "sanitized_synthetic"
+
+
+def test_readiness_report_is_evidence_based_and_not_false_go_live():
+    report = client.get(
+        "/api/v0/readiness",
+        headers={"X-BitAgent-Role": "auditor"},
+    ).json()
+
+    assert report["version"] == "0.9.0"
+    assert report["security"]["all_passed"] is True
+    assert report["security"]["refusal_percent"] == 100
+    assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
+    gates = {gate["id"]: gate for gate in report["uat"]["gates"]}
+    assert gates["automated-replay"]["status"] == "pass"
+    assert gates["owner-historical-incidents"]["status"] == "pending"
+    assert gates["upstream-negative-security"]["status"] == "pending"
+    assert report["uat"]["action_executed"] is False
 
 
 def test_feature_gaps_are_explicit():

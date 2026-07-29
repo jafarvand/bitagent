@@ -2,6 +2,20 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.9.0] - 2026-07-30
+
+### Added
+
+- Six sanitized golden-case replays for deterministic withdrawal severity.
+- Local security self-tests for absolute refusal, non-execution and evidence-chain integrity.
+- Machine-readable UAT report with explicit pass, fail and pending gates.
+- `/api/v0/evaluations/replay` and `/api/v0/readiness` endpoints.
+
+### Limitation
+
+- Owner-supplied historical replay, upstream negative security tests, production
+  identity and formal owner approval remain required for 1.0.
+
 ## [0.8.0] - 2026-07-30
 
 ### Added

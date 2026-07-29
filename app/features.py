@@ -105,6 +105,20 @@ FEATURES = [
         "description": "Allowed, denied and observe-mode decisions are retained with hashes.",
     },
     {
+        "id": "historical-replay",
+        "name": "Sanitized incident replay",
+        "status": "available",
+        "source": "GET /api/v0/evaluations/replay",
+        "description": "Six golden cases validate deterministic severity boundaries.",
+    },
+    {
+        "id": "uat-readiness",
+        "name": "Pilot readiness gates",
+        "status": "partial",
+        "source": "GET /api/v0/readiness",
+        "description": "Machine-readable pass, fail and pending gates prevent false go-live claims.",
+    },
+    {
         "id": "market",
         "name": "Market snapshot",
         "status": "available",
