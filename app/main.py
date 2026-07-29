@@ -26,9 +26,14 @@ from app.incidents import detect_withdrawal_slowdown
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 from app.policy import evaluate_policy
-from app.readiness import historical_replay, security_self_test, uat_readiness
+from app.readiness import (
+    historical_replay,
+    load_upstream_security_report,
+    security_self_test,
+    uat_readiness,
+)
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -310,6 +315,9 @@ async def readiness_report(
         settings.withdrawal_pending_critical_threshold,
     )
     security = security_self_test(verify_chain(settings.evidence_db_path))
+    upstream_security = load_upstream_security_report(
+        settings.upstream_security_report_path
+    )
     return {
         "version": VERSION,
         "replay": replay,
@@ -318,7 +326,9 @@ async def readiness_report(
             replay,
             security,
             live_mode=settings.bitagent_mode == "live",
+            upstream_security=upstream_security,
         ),
+        "upstream_security": upstream_security,
     }
 
 

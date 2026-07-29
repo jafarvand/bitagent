@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     evidence_db_path: str = ".data/bitagent.db"
     evidence_freshness_warning_seconds: int = 120
     bitagent_access_control_mode: Literal["observe", "enforced"] = "observe"
+    upstream_security_report_path: str = ".data/upstream-security-report.json"
 
     def exchange_credentials(self) -> tuple[str, str]:
         """Return explicit client credentials or the first server-style pair."""

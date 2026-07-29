@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 from copy import deepcopy
 
 import pytest
@@ -19,13 +20,18 @@ client = TestClient(app)
 def mock_mode(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "bitagent_mode", "mock")
     monkeypatch.setattr(settings, "evidence_db_path", str(tmp_path / "evidence.db"))
+    monkeypatch.setattr(
+        settings,
+        "upstream_security_report_path",
+        str(tmp_path / "upstream-security-report.json"),
+    )
     monkeypatch.setattr(settings, "bitagent_access_control_mode", "observe")
 
 
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.9.0"
+    assert response.json()["version"] == "0.9.1"
 
 
 def test_dashboard_mock_contract():
@@ -140,7 +146,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "0.9.0",
+        "version": "0.9.1",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -209,7 +215,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "0.9.0"
+    assert report["version"] == "0.9.1"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -218,6 +224,31 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
     assert gates["owner-historical-incidents"]["status"] == "pending"
     assert gates["upstream-negative-security"]["status"] == "pending"
     assert report["uat"]["action_executed"] is False
+
+
+def test_readiness_loads_credential_free_upstream_probe():
+    probe = {
+        "generated_at": "2026-07-29T00:00:00+00:00",
+        "checks": [{"id": "request-id-replay", "passed": True}],
+        "passed": 4,
+        "total": 4,
+        "all_passed": True,
+        "contains_credentials": False,
+    }
+    with open(settings.upstream_security_report_path, "w", encoding="utf-8") as stream:
+        json.dump(probe, stream)
+
+    report = client.get(
+        "/api/v0/readiness",
+        headers={"X-BitAgent-Role": "auditor"},
+    ).json()
+    gates = {gate["id"]: gate for gate in report["uat"]["gates"]}
+
+    assert report["upstream_security"]["contains_credentials"] is False
+    assert gates["upstream-negative-security"]["status"] == "partial"
+    assert "IP/scope/rotation/revocation remain" in gates[
+        "upstream-negative-security"
+    ]["evidence"]
 
 
 def test_feature_gaps_are_explicit():

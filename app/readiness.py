@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+import json
+from pathlib import Path
 
 from app.incidents import detect_withdrawal_slowdown
 from app.policy import PROHIBITED_CAPABILITIES, evaluate_policy
@@ -96,14 +98,43 @@ def security_self_test(audit_verification: dict) -> dict:
     }
 
 
-def uat_readiness(replay: dict, security: dict, *, live_mode: bool) -> dict:
+def load_upstream_security_report(path: str) -> dict | None:
+    report_path = Path(path)
+    if not report_path.exists():
+        return None
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    required = {"generated_at", "checks", "all_passed", "contains_credentials"}
+    if not required.issubset(report) or report["contains_credentials"] is not False:
+        return None
+    return report
+
+
+def uat_readiness(
+    replay: dict,
+    security: dict,
+    *,
+    live_mode: bool,
+    upstream_security: dict | None = None,
+) -> dict:
+    upstream_passed = bool(upstream_security and upstream_security.get("all_passed"))
     gates = [
         {"id": "automated-replay", "status": "pass" if replay["all_passed"] else "fail", "evidence": f"{replay['passed']}/{replay['total']} sanitized cases"},
         {"id": "local-security", "status": "pass" if security["all_passed"] else "fail", "evidence": f"{security['passed']}/{security['total']} local checks"},
         {"id": "prohibited-action-refusal", "status": "pass" if security["refusal_percent"] == 100 else "fail", "evidence": f"{security['refusal_percent']}% refused"},
         {"id": "live-read-smoke", "status": "pass" if live_mode else "pending", "evidence": "live mode configured" if live_mode else "run against staging read-only credentials"},
         {"id": "owner-historical-incidents", "status": "pending", "evidence": "5-20 owner-approved incidents required"},
-        {"id": "upstream-negative-security", "status": "pending", "evidence": "replay/timestamp/IP/scope/rotation/revocation evidence required"},
+        {
+            "id": "upstream-negative-security",
+            "status": "partial" if upstream_passed else "pending",
+            "evidence": (
+                f"{upstream_security['passed']}/{upstream_security['total']} safe authentication probes passed; IP/scope/rotation/revocation remain"
+                if upstream_passed
+                else "replay/timestamp/tamper/IP/scope/rotation/revocation evidence required"
+            ),
+        },
         {"id": "production-identity", "status": "pending", "evidence": "SSO/JWT, MFA and access review required"},
         {"id": "owner-uat-approval", "status": "pending", "evidence": "operations and risk owner sign-off required"},
     ]

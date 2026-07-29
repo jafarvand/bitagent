@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **0.9.0 — Pilot Gate**
+Current release: **0.9.1 — Pilot Gate**
 
 ## What version 0 shows
 
@@ -94,7 +94,8 @@ pytest
 | 0.6.0 | Investigation reports and cited runbook guidance | Complete |
 | 0.7.0 | Executive brief and local operator feedback | Complete |
 | 0.8.0 | Pilot RBAC, refusal policy and expanded access audit | Complete |
-| 0.9.0 | Replay, security and UAT readiness tooling | Current |
+| 0.9.0 | Replay, security and UAT readiness tooling | Complete |
+| 0.9.1 | Reproducible upstream negative-auth security probe | Current |
 | 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |
 
 ## Project documents

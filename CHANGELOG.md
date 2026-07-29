@@ -2,6 +2,15 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.9.1] - 2026-07-30
+
+### Added
+
+- Reproducible read-only upstream authentication probe.
+- Live checks for missing authentication, expired timestamps, query tampering,
+  and request-ID replay rejection.
+- Credential-free probe evidence in the UAT readiness report.
+
 ## [0.9.0] - 2026-07-30
 
 ### Added
