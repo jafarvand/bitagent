@@ -2,6 +2,14 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.7.0] - 2026-07-30
+
+### Added
+
+- Deterministic daily executive brief with priorities and evidence integrity.
+- Local-only append-only operator feedback and aggregate feedback summary.
+- Explicit guarantee that feedback cannot perform an exchange write.
+
 ## [0.6.0] - 2026-07-30
 
 ### Added

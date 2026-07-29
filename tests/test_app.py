@@ -24,7 +24,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.6.0"
+    assert response.json()["version"] == "0.7.0"
 
 
 def test_dashboard_mock_contract():
@@ -104,6 +104,45 @@ def test_investigation_brief_fulfills_runbook_response_contract():
     assert report["runbook"]["section"].startswith("19.")
     assert report["statement"] == "No action executed by bitAgent."
     assert report["action_executed"] is False
+
+
+def test_daily_brief_is_deterministic_and_evidence_backed():
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
+
+    brief = client.get("/api/v0/briefs/daily").json()
+
+    assert brief["status"] == "ready"
+    assert brief["brief_version"] == "1.0.0"
+    assert "42 withdrawals are pending" in brief["headline"]
+    assert brief["priorities"]
+    assert brief["evidence"]["audit_chain_valid"] is True
+    assert brief["evidence"]["sources"]
+    assert brief["limitations"]
+    assert brief["statement"] == "No action executed by bitAgent."
+    assert brief["action_executed"] is False
+
+
+def test_feedback_is_local_append_only_and_never_writes_exchange():
+    response = client.post(
+        "/api/v0/feedback",
+        json={
+            "report_id": "daily-1-test",
+            "rating": "needs_correction",
+            "comment": "Threshold needs owner review.",
+        },
+    )
+    summary = client.get("/api/v0/feedback/summary").json()
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["feedback"]["local_only"] is True
+    assert body["exchange_write_performed"] is False
+    assert "Threshold needs owner review." not in str(body)
+    assert summary == {
+        "version": "0.7.0",
+        "total": 1,
+        "counts": {"needs_correction": 1},
+    }
 
 
 def test_feature_gaps_are_explicit():

@@ -5,23 +5,32 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from app import mock_data
 from app.config import settings
+from app.briefs import daily_executive_brief
 from app.exchange import ExchangeAPIError, exchange_client
-from app.evidence import evidence_trends, recent_evidence, record_dashboard, verify_chain
+from app.evidence import (
+    evidence_trends,
+    feedback_summary,
+    recent_evidence,
+    record_dashboard,
+    record_feedback,
+    verify_chain,
+)
 from app.features import FEATURES
 from app.incidents import detect_withdrawal_slowdown
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
-    description="Read-only evidence-backed exchange investigation reports.",
+    description="Read-only executive briefs and local operator feedback.",
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -42,7 +51,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Investigation Brief",
+        "release": "Executive Brief",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -156,6 +165,43 @@ async def investigate_withdrawal_slowdown(
             freshness_warning_seconds=settings.evidence_freshness_warning_seconds,
         ),
     }
+
+
+@app.get("/api/v0/briefs/daily")
+async def daily_brief(trend_limit: int = Query(default=30, ge=2, le=1000)):
+    return {
+        "version": VERSION,
+        **daily_executive_brief(
+            settings.evidence_db_path,
+            trend_limit=trend_limit,
+            freshness_warning_seconds=settings.evidence_freshness_warning_seconds,
+        ),
+    }
+
+
+class FeedbackRequest(BaseModel):
+    report_id: str = Field(min_length=1, max_length=200)
+    rating: Literal["useful", "not_useful", "needs_correction"]
+    comment: str = Field(default="", max_length=1000)
+
+
+@app.post("/api/v0/feedback", status_code=201)
+async def submit_feedback(feedback: FeedbackRequest):
+    return {
+        "version": VERSION,
+        "feedback": record_feedback(
+            settings.evidence_db_path,
+            feedback.report_id,
+            feedback.rating,
+            feedback.comment.strip(),
+        ),
+        "exchange_write_performed": False,
+    }
+
+
+@app.get("/api/v0/feedback/summary")
+async def get_feedback_summary():
+    return {"version": VERSION, **feedback_summary(settings.evidence_db_path)}
 
 
 UserResource = Literal[

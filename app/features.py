@@ -70,6 +70,20 @@ FEATURES = [
         "description": "Deterministic triage guidance cites the approved slowdown runbook.",
     },
     {
+        "id": "executive-brief",
+        "name": "Daily executive brief",
+        "status": "available",
+        "source": "GET /api/v0/briefs/daily",
+        "description": "Deterministic priorities, evidence, confidence and limitations.",
+    },
+    {
+        "id": "operator-feedback",
+        "name": "Operator feedback",
+        "status": "available",
+        "source": "POST /api/v0/feedback (local only)",
+        "description": "Append-only ratings and corrections that never write upstream.",
+    },
+    {
         "id": "market",
         "name": "Market snapshot",
         "status": "available",

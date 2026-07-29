@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const number = (value, maximumFractionDigits = 2) =>
   Number(value || 0).toLocaleString(undefined, {maximumFractionDigits});
+let currentBriefId = null;
 
 async function json(url) {
   const response = await fetch(url);
@@ -115,18 +116,41 @@ function renderInvestigation(payload) {
   $("brief-guidance").textContent = payload.recommended_investigation;
 }
 
+function renderExecutiveBrief(payload) {
+  if (payload.status !== "ready") return;
+  currentBriefId = payload.brief_id;
+  $("executive-headline").textContent = payload.headline;
+  $("executive-severity").textContent = payload.overall_severity;
+  $("executive-severity").className = `pill ${payload.overall_severity === "healthy" ? "good" : "warn"}`;
+  $("executive-priorities").innerHTML = payload.priorities
+    .map(item => `<li><strong>${item.title}</strong><span>${item.reason}</span></li>`)
+    .join("");
+}
+
+async function submitFeedback(rating) {
+  if (!currentBriefId) return;
+  const response = await fetch("/api/v0/feedback", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({report_id: currentBriefId, rating, comment: ""})
+  });
+  if (!response.ok) throw new Error(`Feedback failed (${response.status})`);
+  $("feedback-status").textContent = "Feedback recorded locally. No exchange write performed.";
+}
+
 async function load() {
   $("refresh").disabled = true;
   try {
     const market = $("market").value.trim().toUpperCase();
     const days = $("days").value;
-    const [status, dashboard, features, audit, trends, investigation] = await Promise.all([
+    const [status, dashboard, features, audit, trends, investigation, brief] = await Promise.all([
       json("/api/v0/status"),
       json(`/api/v0/dashboard?market=${encodeURIComponent(market)}&days=${days}`),
       json("/api/v0/features"),
       json("/api/v0/audit/verify"),
       json("/api/v0/trends?limit=30"),
-      json("/api/v0/investigations/withdrawal-slowdown")
+      json("/api/v0/investigations/withdrawal-slowdown"),
+      json("/api/v0/briefs/daily")
     ]);
     setMode(status);
     renderDashboard(dashboard);
@@ -134,6 +158,7 @@ async function load() {
     renderAudit(audit);
     renderTrends(trends);
     renderInvestigation(investigation);
+    renderExecutiveBrief(brief);
   } catch (error) {
     $("system-state").textContent = "Connection error";
     $("system-state").className = "error";
@@ -145,4 +170,6 @@ async function load() {
 }
 
 $("refresh").addEventListener("click", load);
+$("feedback-useful").addEventListener("click", () => submitFeedback("useful").catch(error => $("feedback-status").textContent = error.message));
+$("feedback-correction").addEventListener("click", () => submitFeedback("needs_correction").catch(error => $("feedback-status").textContent = error.message));
 load();

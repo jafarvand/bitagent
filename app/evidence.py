@@ -35,6 +35,18 @@ def _connect(path: str) -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            report_id TEXT NOT NULL,
+            rating TEXT NOT NULL,
+            comment TEXT NOT NULL,
+            feedback_hash TEXT NOT NULL UNIQUE
+        )
+        """
+    )
     return connection
 
 
@@ -217,3 +229,41 @@ def evidence_trends(path: str, limit: int, freshness_warning_seconds: int) -> di
         ],
         "action_executed": False,
     }
+
+
+def record_feedback(path: str, report_id: str, rating: str, comment: str) -> dict:
+    created_at = datetime.now(UTC).isoformat()
+    material = _canonical(
+        {
+            "created_at": created_at,
+            "report_id": report_id,
+            "rating": rating,
+            "comment": comment,
+        }
+    )
+    feedback_hash = hashlib.sha256(material.encode()).hexdigest()
+    with _connect(path) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO feedback (created_at, report_id, rating, comment, feedback_hash)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (created_at, report_id, rating, comment, feedback_hash),
+        )
+    return {
+        "id": cursor.lastrowid,
+        "created_at": created_at,
+        "report_id": report_id,
+        "rating": rating,
+        "feedback_hash": feedback_hash,
+        "local_only": True,
+    }
+
+
+def feedback_summary(path: str) -> dict:
+    with _connect(path) as connection:
+        rows = connection.execute(
+            "SELECT rating, COUNT(*) AS count FROM feedback GROUP BY rating"
+        ).fetchall()
+    counts = {row["rating"]: row["count"] for row in rows}
+    return {"total": sum(counts.values()), "counts": counts}

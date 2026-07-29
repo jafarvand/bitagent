@@ -19,7 +19,9 @@ or modify exchange configuration.
 ## Consequences
 
 - The current connector implements only `GET`.
-- Write capabilities are not hidden feature flags; they are absent.
+- Exchange write capabilities are not hidden feature flags; they are absent.
+- A local-only feedback POST may store operator ratings/corrections in the
+  bitAgent evidence database. It cannot call or modify the exchange.
 - Early value comes from monitoring, investigation and reporting.
 - Any future write workflow requires a separate ADR, explicit scopes, approval
   policy, idempotency, audit, rollback and security review.
