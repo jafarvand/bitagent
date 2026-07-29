@@ -104,6 +104,22 @@ def recent_evidence(path: str, limit: int) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def latest_evidence_payload(path: str) -> dict | None:
+    with _connect(path) as connection:
+        row = connection.execute(
+            "SELECT id, collected_at, record_hash, payload_json "
+            "FROM evidence ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "collected_at": row["collected_at"],
+        "record_hash": row["record_hash"],
+        "payload": json.loads(row["payload_json"]),
+    }
+
+
 def verify_chain(path: str) -> dict:
     with _connect(path) as connection:
         rows = connection.execute("SELECT * FROM evidence ORDER BY id").fetchall()

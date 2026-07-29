@@ -24,7 +24,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.5.0"
+    assert response.json()["version"] == "0.6.0"
 
 
 def test_dashboard_mock_contract():
@@ -85,6 +85,25 @@ def test_historical_trends_compare_retained_evidence():
     assert trend["deltas"]["orders"] == 10
     assert trend["market"]["last_price_change_percent"] == "1.00"
     assert trend["action_executed"] is False
+
+
+def test_investigation_brief_fulfills_runbook_response_contract():
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
+
+    report = client.get("/api/v0/investigations/withdrawal-slowdown").json()
+
+    assert report["status"] == "ready"
+    assert report["severity"] == "warning"
+    assert "42 withdrawals are pending" in report["conclusion"]
+    assert report["supporting_evidence"]["source"] == "GET /api/bot/operations"
+    assert report["supporting_evidence"]["source_timestamp"]
+    assert report["supporting_evidence"]["rule"]["version"] == "1.0.0"
+    assert report["confidence"] == "limited"
+    assert report["limitations"]
+    assert report["runbook"]["path"] == "docs/runbooks/master-runbook.md"
+    assert report["runbook"]["section"].startswith("19.")
+    assert report["statement"] == "No action executed by bitAgent."
+    assert report["action_executed"] is False
 
 
 def test_feature_gaps_are_explicit():

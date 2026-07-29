@@ -2,6 +2,14 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.6.0] - 2026-07-30
+
+### Added
+
+- Evidence-backed withdrawal slowdown investigation report.
+- Direct conclusion, source timestamp, rule version, confidence and limitations.
+- Approved master-runbook citation, triage guidance and missing-source list.
+
 ## [0.5.0] - 2026-07-30
 
 ### Added

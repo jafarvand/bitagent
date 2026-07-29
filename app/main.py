@@ -12,15 +12,16 @@ from app.exchange import ExchangeAPIError, exchange_client
 from app.evidence import evidence_trends, recent_evidence, record_dashboard, verify_chain
 from app.features import FEATURES
 from app.incidents import detect_withdrawal_slowdown
+from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
-    description="Read-only exchange evidence, historical trends and freshness alerts.",
+    description="Read-only evidence-backed exchange investigation reports.",
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -41,7 +42,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Trend Watch",
+        "release": "Investigation Brief",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -139,6 +140,20 @@ async def trends(limit: int = Query(default=30, ge=2, le=1000)):
             settings.evidence_db_path,
             limit,
             settings.evidence_freshness_warning_seconds,
+        ),
+    }
+
+
+@app.get("/api/v0/investigations/withdrawal-slowdown")
+async def investigate_withdrawal_slowdown(
+    trend_limit: int = Query(default=30, ge=2, le=1000),
+):
+    return {
+        "version": VERSION,
+        **withdrawal_investigation(
+            settings.evidence_db_path,
+            trend_limit=trend_limit,
+            freshness_warning_seconds=settings.evidence_freshness_warning_seconds,
         ),
     }
 

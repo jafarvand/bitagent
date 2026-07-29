@@ -94,23 +94,46 @@ function renderTrends(payload) {
   $("freshness-summary").className = payload.alerts.length ? "error" : "";
 }
 
+function renderInvestigation(payload) {
+  if (payload.status !== "ready") {
+    $("brief-conclusion").textContent = payload.conclusion;
+    $("brief-severity").textContent = payload.status;
+    return;
+  }
+  $("brief-severity").textContent = payload.severity;
+  $("brief-severity").className = `pill ${payload.severity === "healthy" ? "good" : "warn"}`;
+  $("brief-conclusion").textContent = payload.conclusion;
+  const evidence = payload.supporting_evidence;
+  $("brief-evidence").innerHTML = [
+    `${evidence.pending_withdrawals} pending withdrawals`,
+    `Source: ${evidence.source}`,
+    `Generated: ${new Date(evidence.source_timestamp).toLocaleString()}`,
+    `Rule: ${evidence.rule.id} @ ${evidence.rule.version}`,
+    `Confidence: ${payload.confidence}`
+  ].map(item => `<li>${item}</li>`).join("");
+  $("brief-runbook").textContent = payload.runbook.section;
+  $("brief-guidance").textContent = payload.recommended_investigation;
+}
+
 async function load() {
   $("refresh").disabled = true;
   try {
     const market = $("market").value.trim().toUpperCase();
     const days = $("days").value;
-    const [status, dashboard, features, audit, trends] = await Promise.all([
+    const [status, dashboard, features, audit, trends, investigation] = await Promise.all([
       json("/api/v0/status"),
       json(`/api/v0/dashboard?market=${encodeURIComponent(market)}&days=${days}`),
       json("/api/v0/features"),
       json("/api/v0/audit/verify"),
-      json("/api/v0/trends?limit=30")
+      json("/api/v0/trends?limit=30"),
+      json("/api/v0/investigations/withdrawal-slowdown")
     ]);
     setMode(status);
     renderDashboard(dashboard);
     renderFeatures(features);
     renderAudit(audit);
     renderTrends(trends);
+    renderInvestigation(investigation);
   } catch (error) {
     $("system-state").textContent = "Connection error";
     $("system-state").className = "error";

@@ -56,6 +56,20 @@ FEATURES = [
         "description": "Configurable stale or unknown aggregate-evidence warnings.",
     },
     {
+        "id": "investigation-brief",
+        "name": "Withdrawal investigation brief",
+        "status": "available",
+        "source": "GET /api/v0/investigations/withdrawal-slowdown",
+        "description": "Conclusion, evidence, confidence, limitations and next investigation.",
+    },
+    {
+        "id": "runbook-guidance",
+        "name": "Cited runbook guidance",
+        "status": "available",
+        "source": "Master runbook §19",
+        "description": "Deterministic triage guidance cites the approved slowdown runbook.",
+    },
+    {
         "id": "market",
         "name": "Market snapshot",
         "status": "available",
