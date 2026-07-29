@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.exchange import ExchangeClient
-from app.evidence import record_dashboard
+from app.evidence import backup_and_verify, record_dashboard
 from app.main import app
 from app.market_risk import analyze_market_range
 
@@ -31,7 +31,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.9.1"
+    assert response.json()["version"] == "0.9.2"
 
 
 def test_dashboard_mock_contract():
@@ -73,6 +73,20 @@ def test_evidence_ledger_is_append_only_and_verifiable():
     assert all("payload_json" not in item for item in recent["items"])
     assert verification["valid"] is True
     assert verification["records"] == 2
+
+
+def test_evidence_backup_restores_with_valid_chain(tmp_path):
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=7")
+
+    result = backup_and_verify(
+        settings.evidence_db_path,
+        str(tmp_path / "restored" / "evidence.db"),
+    )
+
+    assert result["restorable"] is True
+    assert result["evidence_records"] == 2
+    assert result["integrity"]["valid"] is True
 
 
 def test_historical_trends_compare_retained_evidence():
@@ -146,7 +160,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "0.9.1",
+        "version": "0.9.2",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -215,7 +229,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "0.9.1"
+    assert report["version"] == "0.9.2"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"

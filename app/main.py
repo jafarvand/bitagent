@@ -33,7 +33,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -77,7 +77,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Pilot Gate",
+        "release": "Operational Proof",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),

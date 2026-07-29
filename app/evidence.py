@@ -321,11 +321,31 @@ def recent_access_decisions(path: str, limit: int) -> list[dict]:
             """,
             (limit,),
         ).fetchall()
-    return [
+        return [
         {
             **dict(row),
             "allowed": bool(row["allowed"]),
             "enforced": bool(row["enforced"]),
         }
         for row in rows
-    ]
+        ]
+
+
+def backup_and_verify(source_path: str, backup_path: str) -> dict:
+    """Create a consistent SQLite backup and verify its evidence hash chain."""
+    source = Path(source_path)
+    target = Path(backup_path)
+    if not source.exists():
+        raise FileNotFoundError(f"Evidence database does not exist: {source}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(source) as source_connection:
+        with sqlite3.connect(target) as target_connection:
+            source_connection.backup(target_connection)
+    verification = verify_chain(str(target))
+    return {
+        "backup_path": str(target),
+        "created_at": datetime.now(UTC).isoformat(),
+        "restorable": verification["valid"],
+        "evidence_records": verification["records"],
+        "integrity": verification,
+    }

@@ -2,6 +2,14 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.9.2] - 2026-07-30
+
+### Added
+
+- Consistent SQLite operational-evidence backup with restored-chain verification.
+- Reproducible `python -m scripts.backup_verify` operator check.
+- Requirement-by-requirement 1.0 readiness evidence matrix.
+
 ## [0.9.1] - 2026-07-30
 
 ### Added
