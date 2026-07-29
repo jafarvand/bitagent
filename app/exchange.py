@@ -71,13 +71,14 @@ class ExchangeClient:
                 body_hash,
             ]
         )
+        key_id, secret = settings.exchange_credentials()
         signature = hmac.new(
-            settings.exchange_bot_secret.encode(),
+            secret.encode(),
             canonical.encode(),
             hashlib.sha256,
         ).hexdigest()
         return {
-            "X-Bot-Key-ID": settings.exchange_bot_key_id,
+            "X-Bot-Key-ID": key_id,
             "X-Request-Timestamp": timestamp,
             "X-Request-ID": request_id,
             "X-Request-Signature": signature,
@@ -85,9 +86,11 @@ class ExchangeClient:
         }
 
     async def get(self, path: str, params: dict | None = None) -> dict:
-        if not settings.exchange_bot_key_id or not settings.exchange_bot_secret:
+        key_id, secret = settings.exchange_credentials()
+        if not key_id or not secret:
             raise ExchangeAPIError(
-                "Live mode requires EXCHANGE_BOT_KEY_ID and EXCHANGE_BOT_SECRET"
+                "Live mode requires EXCHANGE_BOT_KEY_ID and EXCHANGE_BOT_SECRET "
+                "or EXCHANGE_BOT_SERVICE_KEYS"
             )
         normalized_path = self._normalized_path(path)
         query_string = self._query_string(params)

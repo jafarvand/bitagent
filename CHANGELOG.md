@@ -2,6 +2,15 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.2.0] - 2026-07-29
+
+### Added
+
+- Deterministic pending-withdrawal incident rule with versioned thresholds.
+- Evidence references, freshness, incident timeline, confidence and limitations.
+- Explicit investigation guidance and `action_executed: false` safety record.
+- Compatibility with server-style `EXCHANGE_BOT_SERVICE_KEYS` credentials.
+
 ## [0.1.0] - 2026-07-29
 
 ### Changed

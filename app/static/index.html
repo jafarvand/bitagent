@@ -11,17 +11,17 @@
     <a class="brand" href="/"><span class="brand-mark">b</span><span>bitAgent</span></a>
     <div class="top-actions">
       <span id="mode-pill" class="pill neutral">connecting</span>
-      <span class="release-chip">SECURE CONNECTOR</span>
-      <span class="version">v<span id="version">0.1.0</span></span>
+      <span class="release-chip">SLOWDOWN SIGNAL</span>
+      <span class="version">v<span id="version">0.2.0</span></span>
     </div>
   </header>
 
   <main>
     <section class="hero">
       <div>
-        <p class="eyebrow">VERSION 0.1 · SECURE CONNECTOR</p>
-        <h1>Operational evidence,<br><span>securely connected.</span></h1>
-        <p class="intro">The 0.1.0 release upgrades the read-only visibility shell with key-ID signing, replay resistance, complete contracts, and an honest view of what still blocks staging.</p>
+        <p class="eyebrow">VERSION 0.2 · SLOWDOWN SIGNAL</p>
+        <h1>See the backlog.<br><span>Know the evidence.</span></h1>
+        <p class="intro">Version 0.2.0 turns aggregate withdrawal evidence into a deterministic, auditable incident signal—with explicit thresholds, confidence, limitations, and no autonomous action.</p>
       </div>
       <div class="hero-status">
         <span class="pulse"></span>
@@ -30,9 +30,9 @@
     </section>
 
     <section class="release-strip">
-      <div><span class="release-icon">01</span><p><strong>Secret stays private</strong><small>Public key ID + HMAC proof</small></p></div>
-      <div><span class="release-icon">02</span><p><strong>Every request is unique</strong><small>Timestamp + single-use request ID</small></p></div>
-      <div><span class="release-icon">03</span><p><strong>Contract is explicit</strong><small>Typed responses + structured errors</small></p></div>
+      <div><span class="release-icon">01</span><p><strong>Deterministic severity</strong><small>Observed count vs versioned threshold</small></p></div>
+      <div><span class="release-icon">02</span><p><strong>Evidence attached</strong><small>Source, request ID and freshness</small></p></div>
+      <div><span class="release-icon">03</span><p><strong>Boundary stays visible</strong><small>Missing age, queue and worker data</small></p></div>
     </section>
 
     <section class="controls">
@@ -67,20 +67,40 @@
         <div class="panel-head"><div><p class="eyebrow">FIRST SIGNAL</p><h2>Withdrawal flow</h2></div><span id="severity" class="pill neutral">—</span></div>
         <div class="signal-number" id="pending-large">—</div>
         <p id="signal-text">Waiting for evidence.</p>
-        <div class="boundary"><strong>0.1.0 evidence boundary</strong><span>Count is visible. Transaction age, queues, workers and root cause still require new upstream endpoints.</span></div>
+        <div class="boundary"><strong>0.2.0 evidence boundary</strong><span>Count-based severity is deterministic. Transaction age, queues, workers and root cause still require new upstream endpoints.</span></div>
       </article>
+    </section>
+
+    <section class="panel incident-panel">
+      <div class="panel-head">
+        <div><p class="eyebrow">DETERMINISTIC INCIDENT</p><h2 id="incident-title">Evaluating withdrawal evidence</h2></div>
+        <span id="incident-state" class="pill neutral">—</span>
+      </div>
+      <div class="incident-grid">
+        <div class="incident-summary">
+          <span>Observed / warning / critical</span>
+          <strong><b id="incident-observed">—</b> / <b id="incident-warning">—</b> / <b id="incident-critical">—</b></strong>
+          <small id="incident-rule">Waiting for rule evaluation</small>
+        </div>
+        <div class="incident-detail"><span>Confidence</span><strong id="incident-confidence">—</strong><small>Limited until age, queue and worker evidence exists.</small></div>
+        <div class="incident-detail"><span>Evidence source</span><strong>Exchange operations</strong><small id="incident-evidence">Waiting for source timestamp</small></div>
+      </div>
+      <div class="incident-bottom">
+        <div><p class="eyebrow">EVIDENCE TIMELINE</p><ol id="incident-timeline"></ol></div>
+        <div><p class="eyebrow">NEXT INVESTIGATION</p><p id="incident-guidance">Waiting for evidence.</p><span class="no-action">NO ACTION EXECUTED</span></div>
+      </div>
     </section>
 
     <section class="panel coverage">
       <div class="panel-head">
-        <div><p class="eyebrow">0.1.0 CAPABILITY MAP</p><h2>Staging readiness, without blind spots</h2></div>
+        <div><p class="eyebrow">0.2.0 CAPABILITY MAP</p><h2>Incident readiness, without blind spots</h2></div>
         <div id="coverage-counts" class="coverage-counts"></div>
       </div>
       <div id="features" class="feature-list"></div>
     </section>
   </main>
 
-  <footer>bitAgent 0.1.0 · Secure Connector · Read-only by architecture · No action executed</footer>
+  <footer>bitAgent 0.2.0 · Slowdown Signal · Read-only by architecture · No action executed</footer>
   <script src="/static/app.js"></script>
 </body>
 </html>

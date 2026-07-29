@@ -34,6 +34,21 @@ function renderDashboard(payload) {
   $("signal-text").textContent = signal.explanation;
   $("severity").textContent = signal.severity;
   $("severity").className = `pill ${signal.severity === "healthy" ? "good" : "warn"}`;
+  const incident = payload.incident;
+  $("incident-title").textContent = incident.title;
+  $("incident-state").textContent = `${incident.severity} · ${incident.state}`;
+  $("incident-state").className = `pill ${incident.severity === "healthy" ? "good" : "warn"}`;
+  $("incident-observed").textContent = number(incident.observed.pending_count, 0);
+  $("incident-warning").textContent = number(incident.thresholds.warning_pending_count, 0);
+  $("incident-critical").textContent = number(incident.thresholds.critical_pending_count, 0);
+  $("incident-rule").textContent = `${incident.rule.id} @ ${incident.rule.version}`;
+  $("incident-confidence").textContent = incident.confidence;
+  const evidence = incident.evidence[0];
+  $("incident-evidence").textContent = `${new Date(evidence.generated_at).toLocaleString()} · freshness ${evidence.data_freshness_seconds ?? "unknown"}s`;
+  $("incident-timeline").innerHTML = incident.timeline.map(item =>
+    `<li><time>${new Date(item.at).toLocaleTimeString()}</time><span>${item.event}</span></li>`
+  ).join("");
+  $("incident-guidance").textContent = incident.recommended_investigation;
   $("updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
 }
 

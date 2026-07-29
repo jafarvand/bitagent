@@ -10,14 +10,15 @@ from app import mock_data
 from app.config import settings
 from app.exchange import ExchangeAPIError, exchange_client
 from app.features import FEATURES
+from app.incidents import detect_withdrawal_slowdown
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
-    description="Read-only secure exchange connector and visibility dashboard.",
+    description="Read-only exchange operations evidence and incident dashboard.",
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -34,15 +35,16 @@ async def health():
 
 @app.get("/api/v0/status")
 async def status():
+    key_id, secret = settings.exchange_credentials()
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Secure Connector",
+        "release": "Slowdown Signal",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
-        "key_id_configured": bool(settings.exchange_bot_key_id),
-        "secret_configured": bool(settings.exchange_bot_secret),
+        "key_id_configured": bool(key_id),
+        "secret_configured": bool(secret),
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -82,11 +84,17 @@ async def dashboard(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     pending = int(operations.get("data", {}).get("pending_withdrawals", 0))
+    incident = detect_withdrawal_slowdown(
+        operations,
+        warning_threshold=settings.withdrawal_pending_warning_threshold,
+        critical_threshold=settings.withdrawal_pending_critical_threshold,
+    )
     return {
         "version": VERSION,
         "mode": settings.bitagent_mode,
         "operations": operations,
         "market": market_data,
+        "incident": incident,
         "signals": [
             {
                 "severity": "warning" if pending else "healthy",

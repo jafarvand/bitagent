@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
@@ -11,10 +12,15 @@ from app.main import app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def mock_mode(monkeypatch):
+    monkeypatch.setattr(settings, "bitagent_mode", "mock")
+
+
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.1.0"
+    assert response.json()["version"] == "0.2.0"
 
 
 def test_dashboard_mock_contract():
@@ -24,6 +30,15 @@ def test_dashboard_mock_contract():
     assert body["mode"] == "mock"
     assert body["operations"]["data"]["pending_withdrawals"] == 42
     assert body["market"]["data"]["market"] == "BTC_USDT"
+    incident = body["incident"]
+    assert incident["severity"] == "warning"
+    assert incident["observed"]["pending_count"] == 42
+    assert incident["rule"] == {
+        "id": "withdrawal-pending-count",
+        "version": "1.0.0",
+    }
+    assert incident["action_executed"] is False
+    assert incident["confidence"] == "limited"
 
 
 def test_feature_gaps_are_explicit():
@@ -84,4 +99,20 @@ def test_status_reports_v02_credentials_without_exposing_values(monkeypatch):
     assert body["key_id_configured"] is True
     assert body["secret_configured"] is True
     assert "pilot-key" not in str(body)
+    assert "test-secret" not in str(body)
+
+
+def test_combined_service_keys_are_supported(monkeypatch):
+    monkeypatch.setattr(settings, "exchange_bot_key_id", "")
+    monkeypatch.setattr(settings, "exchange_bot_secret", "")
+    monkeypatch.setattr(
+        settings,
+        "exchange_bot_service_keys",
+        "pilot-key:test-secret,rotation-key:rotation-secret",
+    )
+
+    assert settings.exchange_credentials() == ("pilot-key", "test-secret")
+    body = client.get("/api/v0/status").json()
+    assert body["key_id_configured"] is True
+    assert body["secret_configured"] is True
     assert "test-secret" not in str(body)

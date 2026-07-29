@@ -53,7 +53,14 @@ FEATURES = [
         "name": "Slowdown detection",
         "status": "partial",
         "source": "Operations counts only",
-        "description": "Can flag pending count; cannot yet inspect oldest age, queue or workers.",
+        "description": "Deterministic count alert exists; age, queue, worker and root cause evidence remain open.",
+    },
+    {
+        "id": "incident-evidence",
+        "name": "Evidence-backed incidents",
+        "status": "available",
+        "source": "Rule withdrawal-pending-count@1.0.0",
+        "description": "Severity, thresholds, evidence, timeline, limitations and investigation guidance.",
     },
     {
         "id": "treasury",

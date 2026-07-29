@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **0.1.0 — Secure Connector**
+Current release: **0.2.0 — Slowdown Signal**
 
 ## What version 0 shows
 
@@ -75,8 +75,8 @@ pytest
 | Version | Focus | Status |
 |---|---|---|
 | 0.0.1 | API connector, mock/live mode, minimum dashboard, coverage matrix | Complete |
-| 0.1.0 | Secure key-ID signing, replay resistance, complete schemas, readiness UI | Current |
-| 0.2.0 | Withdrawal/deposit slowdown detection and incident timeline | Planned |
+| 0.1.0 | Secure key-ID signing, replay resistance, complete schemas, readiness UI | Complete |
+| 0.2.0 | Deterministic withdrawal signal, evidence contract and incident timeline | Current |
 | 0.3.0 | Treasury, liabilities, reconciliation and risk thresholds | Planned |
 | 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |
 
