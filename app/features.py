@@ -42,6 +42,20 @@ FEATURES = [
         "description": "Every stored record can be verified from genesis to the current head.",
     },
     {
+        "id": "historical-trends",
+        "name": "Historical evidence trends",
+        "status": "available",
+        "source": "GET /api/v0/trends",
+        "description": "Bounded period deltas and market price change from retained evidence.",
+    },
+    {
+        "id": "freshness-alerts",
+        "name": "Evidence freshness alerts",
+        "status": "available",
+        "source": "Rule operations-evidence-stale@1.0.0",
+        "description": "Configurable stale or unknown aggregate-evidence warnings.",
+    },
+    {
         "id": "market",
         "name": "Market snapshot",
         "status": "available",

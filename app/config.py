@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     market_range_warning_percent: Decimal = Decimal("5.00")
     market_range_critical_percent: Decimal = Decimal("10.00")
     evidence_db_path: str = ".data/bitagent.db"
+    evidence_freshness_warning_seconds: int = 120
 
     def exchange_credentials(self) -> tuple[str, str]:
         """Return explicit client credentials or the first server-style pair."""

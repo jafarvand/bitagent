@@ -1,11 +1,13 @@
 import hashlib
 import hmac
+from copy import deepcopy
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.exchange import ExchangeClient
+from app.evidence import record_dashboard
 from app.main import app
 from app.market_risk import analyze_market_range
 
@@ -22,7 +24,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.4.0"
+    assert response.json()["version"] == "0.5.0"
 
 
 def test_dashboard_mock_contract():
@@ -64,6 +66,25 @@ def test_evidence_ledger_is_append_only_and_verifiable():
     assert all("payload_json" not in item for item in recent["items"])
     assert verification["valid"] is True
     assert verification["records"] == 2
+
+
+def test_historical_trends_compare_retained_evidence():
+    first = client.get("/api/v0/dashboard?market=BTC_USDT&days=30").json()
+    changed = deepcopy(first)
+    changed.pop("evidence_record")
+    changed["operations"]["data"]["pending_withdrawals"] = 50
+    changed["operations"]["data"]["orders"] = 271
+    changed["market"]["data"]["last"] = "64475.21850000"
+    record_dashboard(settings.evidence_db_path, changed)
+
+    trend = client.get("/api/v0/trends?limit=30").json()
+
+    assert trend["status"] == "ready"
+    assert trend["records"] == 2
+    assert trend["deltas"]["pending_withdrawals"] == 8
+    assert trend["deltas"]["orders"] == 10
+    assert trend["market"]["last_price_change_percent"] == "1.00"
+    assert trend["action_executed"] is False
 
 
 def test_feature_gaps_are_explicit():

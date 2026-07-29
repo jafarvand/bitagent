@@ -9,18 +9,18 @@ from fastapi.staticfiles import StaticFiles
 from app import mock_data
 from app.config import settings
 from app.exchange import ExchangeAPIError, exchange_client
-from app.evidence import recent_evidence, record_dashboard, verify_chain
+from app.evidence import evidence_trends, recent_evidence, record_dashboard, verify_chain
 from app.features import FEATURES
 from app.incidents import detect_withdrawal_slowdown
 from app.market_risk import analyze_market_range
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
-    description="Read-only exchange evidence, risk and tamper-evident audit dashboard.",
+    description="Read-only exchange evidence, historical trends and freshness alerts.",
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -41,7 +41,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Evidence Ledger",
+        "release": "Trend Watch",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -129,6 +129,18 @@ async def evidence_recent(limit: int = Query(default=20, ge=1, le=100)):
 @app.get("/api/v0/audit/verify")
 async def audit_verify():
     return {"version": VERSION, **verify_chain(settings.evidence_db_path)}
+
+
+@app.get("/api/v0/trends")
+async def trends(limit: int = Query(default=30, ge=2, le=1000)):
+    return {
+        "version": VERSION,
+        **evidence_trends(
+            settings.evidence_db_path,
+            limit,
+            settings.evidence_freshness_warning_seconds,
+        ),
+    }
 
 
 UserResource = Literal[

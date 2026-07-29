@@ -11,17 +11,17 @@
     <a class="brand" href="/"><span class="brand-mark">b</span><span>bitAgent</span></a>
     <div class="top-actions">
       <span id="mode-pill" class="pill neutral">connecting</span>
-      <span class="release-chip">EVIDENCE LEDGER</span>
-      <span class="version">v<span id="version">0.4.0</span></span>
+      <span class="release-chip">TREND WATCH</span>
+      <span class="version">v<span id="version">0.5.0</span></span>
     </div>
   </header>
 
   <main>
     <section class="hero">
       <div>
-        <p class="eyebrow">VERSION 0.4 · EVIDENCE LEDGER</p>
-        <h1>Observe the signal.<br><span>Prove the history.</span></h1>
-        <p class="intro">Version 0.4.0 retains aggregate operational evidence in a local append-only hash chain—giving every dashboard observation a verifiable place in history without storing user-level data or secrets.</p>
+        <p class="eyebrow">VERSION 0.5 · TREND WATCH</p>
+        <h1>Compare the evidence.<br><span>Catch stale signals.</span></h1>
+        <p class="intro">Version 0.5.0 compares retained aggregate observations, measures operational and market changes, and warns when source freshness exceeds its configured evidence boundary.</p>
       </div>
       <div class="hero-status">
         <span class="pulse"></span>
@@ -30,8 +30,8 @@
     </section>
 
     <section class="release-strip">
-      <div><span class="release-icon">01</span><p><strong>Aggregate evidence</strong><small>No user records or secrets retained</small></p></div>
-      <div><span class="release-icon">02</span><p><strong>Hash-linked history</strong><small>Every record points to the previous hash</small></p></div>
+      <div><span class="release-icon">01</span><p><strong>Period deltas</strong><small>Orders, deposits and withdrawals</small></p></div>
+      <div><span class="release-icon">02</span><p><strong>Freshness gate</strong><small id="freshness-summary">Checking source freshness</small></p></div>
       <div><span class="release-icon">03</span><p><strong>Integrity verification</strong><small id="audit-summary">Checking evidence chain</small></p></div>
     </section>
 
@@ -46,6 +46,18 @@
         <div><span>Confidence</span><strong id="risk-confidence">—</strong><small>Bounded to summary evidence</small></div>
       </div>
       <div class="risk-boundary"><strong>Risk boundary</strong><span>Observed range is not statistical volatility. Spread, order-book depth, reference divergence, exposure, and treasury remain unavailable.</span></div>
+    </section>
+
+    <section class="panel risk-panel trend-panel">
+      <div class="panel-head">
+        <div><p class="eyebrow">HISTORICAL COMPARISON</p><h2>Evidence-window changes</h2></div>
+        <span id="trend-status" class="pill neutral">—</span>
+      </div>
+      <div class="risk-grid">
+        <div><span>Pending withdrawals Δ</span><strong id="trend-pending">—</strong><small>Oldest to newest retained record</small></div>
+        <div><span>Orders Δ</span><strong id="trend-orders">—</strong><small id="trend-window">Waiting for history</small></div>
+        <div><span>Last price Δ</span><strong id="trend-price">—</strong><small>Bounded to retained market snapshots</small></div>
+      </div>
     </section>
 
     <section class="controls">
@@ -106,14 +118,14 @@
 
     <section class="panel coverage">
       <div class="panel-head">
-        <div><p class="eyebrow">0.4.0 CAPABILITY MAP</p><h2>Stored evidence and integrity, without blind spots</h2></div>
+        <div><p class="eyebrow">0.5.0 CAPABILITY MAP</p><h2>Historical evidence and freshness, without blind spots</h2></div>
         <div id="coverage-counts" class="coverage-counts"></div>
       </div>
       <div id="features" class="feature-list"></div>
     </section>
   </main>
 
-  <footer>bitAgent 0.4.0 · Evidence Ledger · Read-only by architecture · No action executed</footer>
+  <footer>bitAgent 0.5.0 · Trend Watch · Read-only by architecture · No action executed</footer>
   <script src="/static/app.js"></script>
 </body>
 </html>

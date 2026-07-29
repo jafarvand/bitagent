@@ -78,21 +78,39 @@ function renderAudit(payload) {
   $("audit-summary").className = payload.valid ? "" : "error";
 }
 
+function renderTrends(payload) {
+  $("trend-status").textContent = `${payload.status} · ${payload.records} records`;
+  $("trend-status").className = `pill ${payload.status === "ready" ? "good" : "warn"}`;
+  if (payload.records < 1) return;
+  $("trend-pending").textContent = number(payload.deltas.pending_withdrawals, 0);
+  $("trend-orders").textContent = number(payload.deltas.orders, 0);
+  $("trend-price").textContent = payload.market.last_price_change_percent === null
+    ? "Unavailable" : `${payload.market.last_price_change_percent}%`;
+  $("trend-window").textContent = `records ${payload.window.from_record_id} → ${payload.window.to_record_id}`;
+  const freshness = payload.freshness.operations_seconds;
+  $("freshness-summary").textContent = payload.alerts.length
+    ? `${freshness ?? "unknown"}s · warning`
+    : `${freshness ?? "unknown"}s · within threshold`;
+  $("freshness-summary").className = payload.alerts.length ? "error" : "";
+}
+
 async function load() {
   $("refresh").disabled = true;
   try {
     const market = $("market").value.trim().toUpperCase();
     const days = $("days").value;
-    const [status, dashboard, features, audit] = await Promise.all([
+    const [status, dashboard, features, audit, trends] = await Promise.all([
       json("/api/v0/status"),
       json(`/api/v0/dashboard?market=${encodeURIComponent(market)}&days=${days}`),
       json("/api/v0/features"),
-      json("/api/v0/audit/verify")
+      json("/api/v0/audit/verify"),
+      json("/api/v0/trends?limit=30")
     ]);
     setMode(status);
     renderDashboard(dashboard);
     renderFeatures(features);
     renderAudit(audit);
+    renderTrends(trends);
   } catch (error) {
     $("system-state").textContent = "Connection error";
     $("system-state").className = "error";

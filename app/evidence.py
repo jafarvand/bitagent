@@ -2,6 +2,7 @@ import hashlib
 import json
 import sqlite3
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 
@@ -118,4 +119,85 @@ def verify_chain(path: str) -> dict:
         "records": len(rows),
         "head_hash": expected_previous if rows else GENESIS_HASH,
         "verified_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _as_decimal(value: object) -> Decimal | None:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def evidence_trends(path: str, limit: int, freshness_warning_seconds: int) -> dict:
+    """Compare the oldest and newest records in a bounded evidence window."""
+    with _connect(path) as connection:
+        rows = connection.execute(
+            "SELECT * FROM evidence ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    rows = list(reversed(rows))
+    if not rows:
+        return {"records": 0, "status": "insufficient", "alerts": []}
+
+    oldest = json.loads(rows[0]["payload_json"])
+    newest = json.loads(rows[-1]["payload_json"])
+    old_ops = oldest["operations"]["data"]
+    new_ops = newest["operations"]["data"]
+    deltas = {
+        field: int(new_ops.get(field, 0)) - int(old_ops.get(field, 0))
+        for field in ("orders", "deposits", "withdrawals", "pending_withdrawals")
+    }
+
+    old_last = _as_decimal(oldest["market"]["data"].get("last"))
+    new_last = _as_decimal(newest["market"]["data"].get("last"))
+    price_change_percent = None
+    if old_last is not None and new_last is not None and old_last > 0:
+        price_change_percent = str(
+            ((new_last - old_last) / old_last * 100).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        )
+
+    freshness = newest["operations"].get("meta", {}).get(
+        "data_freshness_seconds"
+    )
+    alerts = []
+    if freshness is None:
+        alerts.append(
+            {"severity": "warning", "code": "freshness_unknown", "observed": None}
+        )
+    elif int(freshness) > freshness_warning_seconds:
+        alerts.append(
+            {
+                "severity": "warning",
+                "code": "operations_evidence_stale",
+                "observed": int(freshness),
+                "threshold": freshness_warning_seconds,
+            }
+        )
+
+    return {
+        "records": len(rows),
+        "status": "ready" if len(rows) >= 2 else "insufficient",
+        "window": {
+            "from_record_id": rows[0]["id"],
+            "to_record_id": rows[-1]["id"],
+            "from": rows[0]["collected_at"],
+            "to": rows[-1]["collected_at"],
+        },
+        "deltas": deltas,
+        "market": {
+            "symbol": newest["market"]["data"].get("market"),
+            "last_price_change_percent": price_change_percent,
+        },
+        "freshness": {
+            "operations_seconds": freshness,
+            "warning_threshold_seconds": freshness_warning_seconds,
+        },
+        "alerts": alerts,
+        "limitations": [
+            "Trends reflect dashboard collection times, not a fixed sampling schedule.",
+            "Aggregate deltas do not identify affected users, assets or networks.",
+        ],
+        "action_executed": False,
     }

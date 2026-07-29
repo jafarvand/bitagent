@@ -2,6 +2,14 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.5.0] - 2026-07-30
+
+### Added
+
+- Historical aggregate deltas across a bounded evidence window.
+- Decimal-safe market last-price change between retained observations.
+- Configurable operations-evidence freshness alerts and limitations.
+
 ## [0.4.0] - 2026-07-30
 
 ### Added
