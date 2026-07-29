@@ -11,13 +11,13 @@ from app.config import settings
 from app.exchange import ExchangeAPIError, exchange_client
 from app.features import FEATURES
 
-VERSION = "0.0.1"
+VERSION = "0.1.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
-    description="Read-only exchange visibility shell.",
+    description="Read-only secure exchange connector and visibility dashboard.",
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -37,11 +37,12 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Visibility Shell",
+        "release": "Secure Connector",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
-        "token_configured": bool(settings.exchange_bot_token),
+        "key_id_configured": bool(settings.exchange_bot_key_id),
+        "secret_configured": bool(settings.exchange_bot_secret),
         "timestamp": datetime.now(UTC).isoformat(),
     }
 

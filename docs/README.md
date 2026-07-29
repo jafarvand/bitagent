@@ -11,21 +11,40 @@ Companion to `openapi.yaml` and `bitAgent.postman_collection.json` in this folde
 
 ## Authentication method
 
-Custom HMAC-SHA256 service-to-service signing — **not** JWT, not a plain API key. Implemented in `Core\Security\BotServiceAuth`, enforced in `BotController::beforeExecuteRoute`.
+Custom HMAC-SHA256 service-to-service signing — **not** JWT, not a plain API key. Implemented in `Core\Security\BotServiceAuth` (+ `Core\Security\BotNonceStore` for replay protection), enforced in `BotController::beforeExecuteRoute`.
+
+**v0.2 — the secret is never transmitted.** The v0.1 pilot design sent the shared secret itself as the bearer token on every request (`X-Exchange-Bot-Authorization: Bearer <secret>`), which meant capturing one request disclosed the secret and let an attacker sign new ones — the HMAC added no real protection over a plain static token. v0.2 fixes this: the caller identifies *which* key it's using via `X-Bot-Key-ID`, the server looks up the matching secret itself, and the caller only ever proves possession of the secret through the signature.
 
 **Signing recipe:**
-1. Canonical string: `METHOD\nPATH\nTIMESTAMP\nREQUEST_ID` (method uppercased, request ID lowercased, joined with `\n`).
-2. `signature = hex(HMAC-SHA256(canonical, shared_secret))`.
+1. Canonical string (fields joined with `\n`):
+   ```
+   METHOD
+   PATH
+   SORTED_QUERY_STRING
+   TIMESTAMP
+   REQUEST_ID
+   BODY_SHA256_HEX
+   ```
+   - `METHOD`: uppercase, e.g. `GET`.
+   - `PATH`: URL path only, e.g. `/api/bot/operations` — no host, no query string.
+   - `SORTED_QUERY_STRING`: query params sorted by key (byte order), each pair `rawurlencode(key)=rawurlencode(value)`, joined by `&`; empty string if none. **This must cover every query param** — v0.1's canonical string omitted the query entirely, so an intermediary could rewrite `date_from`/`date_to` on a signed request without invalidating the signature. Verified fixed: a tampered `date_from` on an otherwise-validly-signed request now gets rejected with 401 (tested 2026-07-29).
+   - `TIMESTAMP` / `REQUEST_ID`: the literal values also sent in the headers below.
+   - `BODY_SHA256_HEX`: sha256 of the raw body, lowercase hex. Every current endpoint is GET with no body, so this is always the empty-string hash: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+2. `signature = lowercase_hex(HMAC-SHA256(canonical, shared_secret))`.
 3. Send four headers on every request:
-   - `X-Exchange-Bot-Authorization: Bearer <shared_secret>` — **use this header, not `Authorization`**. This Apache/mod_php build does not forward the standard `Authorization` header into PHP; `Core\Security\BotServiceAuth` checks `Authorization` first and falls back to `X-Exchange-Bot-Authorization`, and only the fallback was confirmed working end-to-end.
+   - `X-Bot-Key-ID: <key id>` — e.g. `bitagent-pilot-01`. Identifies which secret to use; the secret itself is never sent.
    - `X-Request-Timestamp: <unix seconds>` — must be within 60s of server time.
-   - `X-Request-ID: <uuid>` — must be a valid v1-5 UUID; echoed back in the response for audit correlation.
+   - `X-Request-ID: <uuid>` — v1-5 UUID, **single-use**: replaying an already-seen ID now gets rejected with 409 (`BotNonceStore`, file-based claim under `temp/bot_nonces/`, retained 5 minutes — longer than the 60s clock-skew window so a nonce can't "expire back into" validity).
    - `X-Request-Signature: <hex hmac>`.
-4. Secret lives in `.env.bitagent` at the repo root (`EXCHANGE_BOT_SERVICE_TOKENS`, comma-separated for rotation — old + new token both valid during a rotation window), loaded into the `exchange-backend` container via `env_file` in `docker-compose.yml`. **Not committed to the config file itself, not printed in this doc.**
-5. Optional IP allowlist via `EXCHANGE_BOT_ALLOWED_IPS` (comma-separated) — currently **unset** (open) per the 2026-07-29 pilot decision; add the bitAgent's egress IP there once known.
-6. All failures return a structured JSON error (`{"error":{"code","message","request_id"}}`) with the appropriate status: 503 if the service token isn't configured, 403 for a denied IP, 401 for a bad/missing signature.
+4. Secrets live in `.env.bitagent` at the repo root as `EXCHANGE_BOT_SERVICE_KEYS=key_id:secret,key_id2:secret2` (comma-separated `key_id:secret` pairs — add a new pair to rotate without downtime, remove one to revoke immediately), loaded into the `exchange-backend` container via `env_file` in `docker-compose.yml`. **Not committed to the config file itself, not printed in this doc.** A container recreate (`docker compose up -d exchange-backend`) is required after editing `.env.bitagent` for the new keys to take effect.
+5. Optional IP allowlist via `EXCHANGE_BOT_ALLOWED_IPS` (comma-separated) — currently **unset** (open) per the 2026-07-29 pilot decision. **Configure this before any real production access**, not just the pilot — it's the one item on this list that's a pure operational input (the bitAgent's actual egress IP) rather than something buildable in advance.
+6. Per-key rate limiting: `EXCHANGE_BOT_RATE_LIMIT_PER_MINUTE` (default 120), file-counter based under `temp/bot_ratelimit/`. Exceeding it returns 429.
+7. Every auth outcome (success, bad signature, IP denied, rate limited, replay, config missing) is logged via `error_log` — visible in `docker compose logs exchange-backend`, tagged `[bot-auth]` with `event`, `key_id`, `request_id`, `ip`, `path`.
+8. All failures return a structured JSON error (`{"error":{"code","message","request_id"}}`) with the appropriate status: 503 config missing, 403 IP denied, 429 rate limited, 401 bad/missing signature, 409 replay.
 
 There is no write, trade, transfer, or withdrawal action reachable through this controller — an earlier `cancelOrderAction` was removed before routing anything live.
+
+**Still open on auth:** key revocation/rotation is supported by the `EXCHANGE_BOT_SERVICE_KEYS` format described above, but there's no tooling around it yet (it's a manual `.env.bitagent` edit + container recreate) — fine for a single pilot key, would want a real process before onboarding multiple consumers.
 
 ## Available read-only endpoints
 
@@ -124,9 +143,44 @@ Status derivation order (first match wins): `cancelled` → `completed` → `pro
 - **`value_irt`**: `total * mark_price_irt`, where mark price is looked up `ASSET_IRT` directly, or synthesized via `ASSET_USDT * USDT_IRT` if no direct pair exists; `null` if neither resolves.
 - **PnL**: currently **execution PnL only** (sum of `order_pl.pl_irt`) — the response explicitly flags `"calculation_complete": false` and `"incomplete_reason": "weighted_average_ledger_not_connected"`. Don't treat this as a complete PnL figure.
 
-## Not yet built (flagged in the original requirements, still open)
+## OpenAPI/Postman fixes applied in v0.2
 
-- **Treasury** (exchange hot-wallet balances/status) and **Liabilities** (aggregated customer balance per asset) have no endpoint yet. The closest existing thing is `market-monitor`'s internal `user_totals` job (Python sidecar, `/status/user_totals`, reachable only from `exchange-admin`'s network, not from bitAgent) — it computes per-user totals from `exchange-core-mysql`'s `trade_log.slice_balance_<unix_ts>` snapshot tables, which is the right data source, but nothing aggregates or exposes it outside that sidecar today. Building this safely means confirming the live schema first (a `SHOW TABLES`/`DESCRIBE` was blocked by policy during this session as a live-prod DB action) rather than guessing at column names.
-- **Wallet-mon queue backlog / Kafka consumer lag**: no endpoint on any `*-wallet-mon` service or on `core-webhook-handler` exposes this.
-- **Confirmation count** and **failure/rejection reason** on withdrawals/deposits: not present in the `Withdraw`/`Deposit` models as queried here — would need either a schema check or a different data source.
-- **Sandbox/staging environment, business thresholds, incident history, alert channel (Telegram/Slack/email)**: none exist yet; these are inputs only you can supply, not things derivable from this codebase.
+- Full response schemas for every endpoint (user summary/balances/trades/pnl previously had none).
+- Fixed the invalid `type: "null"` on `cost_basis_mark_irt` → `nullable: true`.
+- Added `required` arrays on all response objects and `Meta`.
+- `generated_at`/`as_of`/`executed_at` marked `format: date-time` (they're true ISO 8601). `created_at`/`updated_at`/`date_from`/`date_to` are **not** — see "Known timestamp inconsistency" below — left as plain strings with an explicit note rather than falsely typed.
+- Full error-response set (400/401/403/404/409/422/429/500/502/503) on every path, one shared `ErrorResponse` schema.
+- Security scheme description now documents all four required headers and the exact signing recipe (OpenAPI can't natively express multi-header HMAC, so this is a documented placeholder, not a literal `apiKey` mechanism).
+- `limit` query param documented (already implemented server-side: max 100, default 50) on trades/deposits/withdrawals. **Cursor-based pagination is still not implemented** — tracked as a v0.3 item, not fabricated in the spec.
+- Postman: no more hardcoded `user_1`/fixed dates (now `{{user_id}}`/`{{date_from}}`/`{{date_to}}` — set at the environment level); secret moved out of collection variables into a private Postman Environment (`bot_secret`, `bot_key_id` — **never export/share this environment**); URL parsing now uses Postman's own `URL` object instead of Node's `url` module; the signed query string is built the same way the server verifies it; added response-time/status/structure tests plus negative tests (missing auth → 401, expired timestamp → 401, replay → 409).
+
+## Known timestamp inconsistency (still open)
+
+`generated_at`/`as_of` use `gmdate('c')` → real ISO 8601 (`2026-07-29T18:18:33+00:00`). `created_at`/`updated_at`/`confirmed_at`/`date_from`/`date_to` come straight from MySQL `DATETIME` columns or `gmdate('Y-m-d H:i:s', ...)` → `2026-07-29 18:18:31`, UTC but not RFC 3339 and with no `Z`/offset marker. Both are documented as-is in `openapi.yaml` rather than papered over. Standardizing everything to `…Z` UTC is a real fix, just not a safe one to make blind — several of these fields are read by other things in `exchange-backend` (the admin panel, possibly the mobile/SPA clients on the equivalent non-bot routes) and changing the format is a cross-cutting change outside this controller, not something to do as a side effect of the bitAgent pilot.
+
+## Not yet built
+
+**Auth hardening still open** (see "Still open on auth" above): revocation/rotation tooling.
+
+**New aggregate/ops endpoints requested for genuine exchange-wide slowdown detection** (the existing endpoints require already knowing which user is affected — fine for investigating a specific report, not for detecting a slowdown in the first place). None of these exist yet; building them needs either a live-schema check I haven't been able to do (see below) or new integration work against services outside `exchange-backend`:
+
+| Endpoint | Data source it would need |
+|---|---|
+| `GET /api/bot/health` | exchange-backend itself + JSON-RPC reachability to exchange-core — buildable now |
+| `GET /api/bot/transactions/summary` | Extension of existing `Deposit`/`Withdraw` models — buildable now, needs a decision on what "oldest pending age" bucketing looks like |
+| `GET /api/bot/withdrawals/pending` | Same models, needs pagination added first |
+| `GET /api/bot/deposits/pending` | Same models, needs pagination added first |
+| `GET /api/bot/networks/status` | Nothing today exposes per-chain wallet-mon health — needs new endpoints on each `*-wallet-mon` service |
+| `GET /api/bot/queues/status` | Kafka consumer-lag isn't exposed anywhere (`core-webhook-handler` consumes but doesn't report lag) |
+| `GET /api/bot/workers/status` | No worker/heartbeat concept currently exists in `exchange-backend` or the wallet services as inspected |
+| `GET /api/bot/markets` | `MarketController` already has the underlying data (`/api/market/list`) — mostly a matter of adding a bot-auth'd wrapper |
+| `GET /api/bot/market/{market}/orderbook-summary` | `/api/orderbook/depth/{MARKET}` already exists non-bot-auth'd — same, wrapper work |
+| `GET /api/bot/liabilities` | `exchange-core-mysql`'s `trade_log.slice_balance_<unix_ts>` snapshot tables (confirmed via `market-monitor`'s `calc_user_totals7.py`) — **schema not verified live**, a `SHOW TABLES`/`DESCRIBE` was blocked by this session's permission policy as a live-prod DB read; needs either that check or you supplying the schema |
+| `GET /api/bot/treasury` | No aggregation point exists at all — would need new integration against every `*-wallet-mon`/`*-wallet-gen` service's own DB |
+| `GET /api/bot/reconciliation` | Depends on both `liabilities` and `treasury` existing first |
+
+Per-withdrawal fields still missing regardless of endpoint (**confirmation count**, **required confirmations**, **status reason/code**, **retry count**, **worker/queue reference**): not present in the `Withdraw` model as queried today — needs either a schema check or a different data source per field.
+
+**Not derivable from this codebase at all**: sandbox/staging environment, business thresholds (latency, spread, hot-wallet min/max, reconciliation tolerance), incident history, alert channel (Telegram/Slack/email). These are inputs only you can supply.
+
+**Recommended next milestone** (matches the reviewer's suggestion): pick a subset of the six buildable-now endpoints above (health, transactions/summary, pending withdrawals/deposits, markets, orderbook-summary) and confirm whether the liabilities schema check can be unblocked, before writing any of the wallet-service integration work.

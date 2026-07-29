@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **0.0.1 — Visibility Shell**
+Current release: **0.1.0 — Secure Connector**
 
 ## What version 0 shows
 
@@ -34,10 +34,12 @@ Without credentials the app starts in `mock` mode. For live read-only data, edit
 ```env
 BITAGENT_MODE=live
 EXCHANGE_API_BASE_URL=https://devapi.zekabot.com
-EXCHANGE_BOT_TOKEN=replace-locally
+EXCHANGE_BOT_KEY_ID=bitagent-pilot-01
+EXCHANGE_BOT_SECRET=replace-locally
 ```
 
-Never commit `.env` or a real token.
+Never commit `.env` or a real signing secret. The key ID is public; the secret
+must remain only in an approved local secret store.
 
 ## Local Python run
 
@@ -72,8 +74,8 @@ pytest
 
 | Version | Focus | Status |
 |---|---|---|
-| 0.0.1 | API connector, mock/live mode, minimum dashboard, coverage matrix | Current |
-| 0.1.0 | Complete schemas, secure key-ID signing, pagination, health/queue endpoints | Planned |
+| 0.0.1 | API connector, mock/live mode, minimum dashboard, coverage matrix | Complete |
+| 0.1.0 | Secure key-ID signing, replay resistance, complete schemas, readiness UI | Current |
 | 0.2.0 | Withdrawal/deposit slowdown detection and incident timeline | Planned |
 | 0.3.0 | Treasury, liabilities, reconciliation and risk thresholds | Planned |
 | 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |

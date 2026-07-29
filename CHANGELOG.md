@@ -2,6 +2,17 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.1.0] - 2026-07-29
+
+### Changed
+
+- Began the 0.1.0 API-contract v0.2 migration.
+- Replaced the transmitted bearer secret with a public `X-Bot-Key-ID` header.
+- Signed the normalized path, sorted query string, timestamp, request ID, and
+  SHA-256 body hash.
+- Added deterministic signing and credential-redaction tests.
+- Added the Secure Connector dashboard identity and expanded capability map.
+
 ## [0.0.1] - 2026-07-29
 
 ### Added

@@ -31,6 +31,15 @@ REQUEST_ID
 BODY_SHA256
 ```
 
+Client canonicalization rules:
+
+- Paths are absolute, contain no embedded query or fragment, and resolve `.`
+  and `..` segments before signing.
+- Query keys and values are converted to strings, stably sorted by key in byte
+  order, and percent-encoded with spaces as `%20`; repeated keys are retained.
+- GET requests use the SHA-256 digest of an empty byte string as `BODY_SHA256`.
+- The exact encoded query string included in the signature is sent upstream.
+
 The server rejects expired timestamps and previously used request IDs, applies
 per-key scopes and rate limits, and supports immediate revocation and rotation.
 

@@ -1,12 +1,12 @@
 {
   "info": {
     "name": "Bitimen bitAgent read-only pilot",
-    "description": "Read-only BotController endpoints on exchange-backend. Set collection variables base_url and bot_token before running; the pre-request script signs every call automatically per Core\\Security\\BotServiceAuth.",
+    "description": "Read-only BotController endpoints on exchange-backend. Import this collection, then create a PRIVATE Postman Environment (not a collection variable, and never export/share it) with base_url, bot_key_id, and bot_secret. The pre-request script signs every call automatically per Core\\Security\\BotServiceAuth v0.2 (key-ID + HMAC, secret never sent on the wire).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url", "value": "https://devapi.zekabot.com" },
-    { "key": "bot_token", "value": "REPLACE_ME" }
+    { "key": "base_url", "value": "{{base_url}}", "description": "Set in your environment, not here." },
+    { "key": "user_id", "value": "1", "description": "Override per-request or at the environment level; do not hardcode a specific user across the whole collection." }
   ],
   "event": [
     {
@@ -14,79 +14,231 @@
       "script": {
         "type": "text/javascript",
         "exec": [
+          "// Secret must come from a private Environment, never a collection variable",
+          "// (collection variables are the thing people accidentally export/share).",
+          "const secret = pm.environment.get('bot_secret');",
+          "const keyId = pm.environment.get('bot_key_id');",
+          "if (!secret || !keyId) {",
+          "    throw new Error('Set bot_secret and bot_key_id in a private Postman Environment before running this collection.');",
+          "}",
+          "",
           "const CryptoJS = require('crypto-js');",
-          "const url = require('url');",
-          "const path = url.parse(pm.request.url.toString().replace('{{base_url}}', '')).pathname;",
-          "const method = pm.request.method.toUpperCase();",
+          "",
+          "// Use Postman's own URL model instead of Node's url module — this",
+          "// resolves {{variables}} first and matches what actually gets sent.",
+          "const req = pm.request;",
+          "const resolvedUrl = pm.variables.replaceIn(req.url.toString());",
+          "const u = new URL(resolvedUrl);",
+          "const path = u.pathname;",
+          "",
+          "// Canonical sorted query string: exclude nothing the server adds",
+          "// itself (there is nothing to exclude client-side — the '_url'",
+          "// routing artifact is injected server-side by Apache/Phalcon and",
+          "// stripped there before verification, so it never appears here).",
+          "const params = [];",
+          "u.searchParams.forEach((v, k) => params.push([k, v]));",
+          "params.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);",
+          "const sortedQuery = params.map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');",
+          "",
+          "const method = req.method.toUpperCase();",
           "const ts = Math.floor(Date.now() / 1000).toString();",
-          "const rid = pm.variables.replaceIn('{{$guid}}');",
-          "const secret = pm.collectionVariables.get('bot_token');",
-          "const canonical = [method, path, ts, rid.toLowerCase()].join('\\n');",
+          "const rid = pm.variables.replaceIn('{{$guid}}').toLowerCase();",
+          "const bodyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'; // sha256('') — every route here is GET with no body",
+          "",
+          "const canonical = [method, path, sortedQuery, ts, rid, bodyHash].join('\\n');",
           "const sig = CryptoJS.HmacSHA256(canonical, secret).toString(CryptoJS.enc.Hex);",
-          "pm.request.headers.upsert({ key: 'X-Exchange-Bot-Authorization', value: 'Bearer ' + secret });",
+          "",
+          "pm.request.headers.upsert({ key: 'X-Bot-Key-ID', value: keyId });",
           "pm.request.headers.upsert({ key: 'X-Request-Timestamp', value: ts });",
           "pm.request.headers.upsert({ key: 'X-Request-ID', value: rid });",
-          "pm.request.headers.upsert({ key: 'X-Request-Signature', value: sig });"
+          "pm.request.headers.upsert({ key: 'X-Request-Signature', value: sig });",
+          "",
+          "pm.collectionVariables.set('_last_request_id', rid);",
+          "pm.collectionVariables.set('_last_request_started_at', Date.now().toString());"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('responds within 3s', () => pm.expect(pm.response.responseTime).to.be.below(3000));",
+          "if (pm.response.code < 400) {",
+          "    pm.test('status is 2xx', () => pm.response.to.be.success);",
+          "    pm.test('body has data and meta', () => {",
+          "        const json = pm.response.json();",
+          "        pm.expect(json).to.have.property('data');",
+          "        pm.expect(json).to.have.property('meta');",
+          "    });",
+          "    pm.test('meta.request_id matches the request we sent', () => {",
+          "        const json = pm.response.json();",
+          "        pm.expect(json.meta.request_id).to.eql(pm.collectionVariables.get('_last_request_id'));",
+          "    });",
+          "    pm.test('meta.data_freshness_seconds is a non-negative number', () => {",
+          "        const json = pm.response.json();",
+          "        pm.expect(json.meta.data_freshness_seconds).to.be.a('number').and.to.be.at.least(0);",
+          "    });",
+          "} else {",
+          "    pm.test('error body has error.code/message/request_id', () => {",
+          "        const json = pm.response.json();",
+          "        pm.expect(json).to.have.nested.property('error.code');",
+          "        pm.expect(json).to.have.nested.property('error.message');",
+          "        pm.expect(json).to.have.nested.property('error.request_id');",
+          "    });",
+          "}"
         ]
       }
     }
   ],
   "item": [
     {
-      "name": "Operations (aggregate deposits/withdrawals/orders)",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "{{base_url}}/api/bot/operations?date_from=2026-06-29&date_to=2026-07-29", "host": ["{{base_url}}"], "path": ["api","bot","operations"], "query": [{"key":"date_from","value":"2026-06-29"},{"key":"date_to","value":"2026-07-29"}] }
-      }
+      "name": "Happy path",
+      "item": [
+        {
+          "name": "Operations (aggregate deposits/withdrawals/orders)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/operations?date_from={{date_from}}&date_to={{date_to}}", "host": ["{{base_url}}"], "path": ["api","bot","operations"], "query": [{"key":"date_from","value":"{{date_from}}"},{"key":"date_to","value":"{{date_to}}"}] }
+          }
+        },
+        {
+          "name": "Market summary",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/market/{{market}}/summary", "host": ["{{base_url}}"], "path": ["api","bot","market","{{market}}","summary"] }
+          }
+        },
+        {
+          "name": "User summary",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/summary", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","summary"] }
+          }
+        },
+        {
+          "name": "User balances",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/balances", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","balances"] }
+          }
+        },
+        {
+          "name": "User trades",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/trades?limit={{limit}}", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","trades"], "query": [{"key":"limit","value":"{{limit}}"}] }
+          }
+        },
+        {
+          "name": "User deposits",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/deposits?limit={{limit}}", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","deposits"], "query": [{"key":"limit","value":"{{limit}}"}] }
+          }
+        },
+        {
+          "name": "User withdrawals",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/withdrawals?limit={{limit}}", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","withdrawals"], "query": [{"key":"limit","value":"{{limit}}"}] }
+          }
+        },
+        {
+          "name": "User PnL",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/pnl", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","pnl"] }
+          }
+        }
+      ]
     },
     {
-      "name": "Market summary",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "{{base_url}}/api/bot/market/BTC_USDT/summary", "host": ["{{base_url}}"], "path": ["api","bot","market","BTC_USDT","summary"] }
-      }
-    },
-    {
-      "name": "User summary",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "{{base_url}}/api/bot/user/1/summary", "host": ["{{base_url}}"], "path": ["api","bot","user","1","summary"] }
-      }
-    },
-    {
-      "name": "User balances",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "{{base_url}}/api/bot/user/1/balances", "host": ["{{base_url}}"], "path": ["api","bot","user","1","balances"] }
-      }
-    },
-    {
-      "name": "User trades",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "{{base_url}}/api/bot/user/1/trades", "host": ["{{base_url}}"], "path": ["api","bot","user","1","trades"] }
-      }
-    },
-    {
-      "name": "User deposits",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "{{base_url}}/api/bot/user/1/deposits", "host": ["{{base_url}}"], "path": ["api","bot","user","1","deposits"] }
-      }
-    },
-    {
-      "name": "User withdrawals",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "{{base_url}}/api/bot/user/1/withdrawals", "host": ["{{base_url}}"], "path": ["api","bot","user","1","withdrawals"] }
-      }
-    },
-    {
-      "name": "User PnL",
-      "request": {
-        "method": "GET",
-        "url": { "raw": "{{base_url}}/api/bot/user/1/pnl", "host": ["{{base_url}}"], "path": ["api","bot","user","1","pnl"] }
-      }
+      "name": "Negative tests (auth)",
+      "item": [
+        {
+          "name": "Missing signature headers entirely",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "type": "text/javascript", "exec": [
+                "// Deliberately skip the collection-level pre-request signer for this one request.",
+                "pm.request.headers.remove('X-Bot-Key-ID');",
+                "pm.request.headers.remove('X-Request-Timestamp');",
+                "pm.request.headers.remove('X-Request-ID');",
+                "pm.request.headers.remove('X-Request-Signature');"
+              ] }
+            },
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('rejected with 401', () => pm.response.to.have.status(401));",
+                "pm.test('error code is service_auth_failed', () => pm.expect(pm.response.json().error.code).to.eql('service_auth_failed'));"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/operations", "host": ["{{base_url}}"], "path": ["api","bot","operations"] }
+          }
+        },
+        {
+          "name": "Expired timestamp (>60s old)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "type": "text/javascript", "exec": [
+                "const CryptoJS = require('crypto-js');",
+                "const secret = pm.environment.get('bot_secret');",
+                "const keyId = pm.environment.get('bot_key_id');",
+                "const path = '/api/bot/operations';",
+                "const ts = (Math.floor(Date.now() / 1000) - 300).toString();",
+                "const rid = pm.variables.replaceIn('{{$guid}}').toLowerCase();",
+                "const bodyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';",
+                "const sig = CryptoJS.HmacSHA256([ 'GET', path, '', ts, rid, bodyHash ].join('\\n'), secret).toString(CryptoJS.enc.Hex);",
+                "pm.request.headers.upsert({ key: 'X-Bot-Key-ID', value: keyId });",
+                "pm.request.headers.upsert({ key: 'X-Request-Timestamp', value: ts });",
+                "pm.request.headers.upsert({ key: 'X-Request-ID', value: rid });",
+                "pm.request.headers.upsert({ key: 'X-Request-Signature', value: sig });"
+              ] }
+            },
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('rejected with 401 (clock skew)', () => pm.response.to.have.status(401));"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/operations", "host": ["{{base_url}}"], "path": ["api","bot","operations"] }
+          }
+        },
+        {
+          "name": "Replayed request ID (run this twice)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "// First run: expect 200. Second run with the SAME X-Request-ID",
+                "// (Postman Runner 'repeat' with this as the only saved value,",
+                "// or manually copy _last_request_id and hardcode it below):",
+                "// expect 409 request_replayed.",
+                "pm.test('status is 200 or 409 (replay)', () => {",
+                "    pm.expect([200, 409]).to.include(pm.response.code);",
+                "});",
+                "if (pm.response.code === 409) {",
+                "    pm.test('error code is request_replayed', () => pm.expect(pm.response.json().error.code).to.eql('request_replayed'));",
+                "}"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/operations", "host": ["{{base_url}}"], "path": ["api","bot","operations"] }
+          }
+        }
+      ]
     }
   ]
 }

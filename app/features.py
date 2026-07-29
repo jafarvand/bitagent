@@ -1,5 +1,26 @@
 FEATURES = [
     {
+        "id": "auth-v02",
+        "name": "Secure request signing",
+        "status": "available",
+        "source": "API contract v0.2",
+        "description": "Key ID, canonical query/body signing and no secret on the wire.",
+    },
+    {
+        "id": "replay",
+        "name": "Replay resistance",
+        "status": "available",
+        "source": "Request ID + 60s window",
+        "description": "Single-use request IDs, timestamp checks and per-key rate limiting.",
+    },
+    {
+        "id": "contracts",
+        "name": "Complete API contracts",
+        "status": "available",
+        "source": "OpenAPI 0.2 pilot",
+        "description": "Stable response fields and shared structured error schemas.",
+    },
+    {
         "id": "operations",
         "name": "Operations overview",
         "status": "available",
@@ -40,6 +61,27 @@ FEATURES = [
         "status": "missing",
         "source": "Endpoint required",
         "description": "Exchange-controlled wallet balances are not exposed.",
+    },
+    {
+        "id": "pagination",
+        "name": "Bounded pagination",
+        "status": "partial",
+        "source": "Limit 1–100",
+        "description": "Page limits exist; cursor pagination and next_cursor remain open.",
+    },
+    {
+        "id": "timestamps",
+        "name": "UTC timestamps",
+        "status": "partial",
+        "source": "Mixed ISO 8601 / MySQL UTC",
+        "description": "Freshness fields are ISO 8601; legacy transaction fields need normalization.",
+    },
+    {
+        "id": "upstream-health",
+        "name": "Exchange dependency health",
+        "status": "missing",
+        "source": "GET /api/bot/health required",
+        "description": "Local health exists; upstream API and core dependency health are not exposed.",
     },
     {
         "id": "liabilities",
