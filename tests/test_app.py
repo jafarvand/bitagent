@@ -19,12 +19,13 @@ client = TestClient(app)
 def mock_mode(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "bitagent_mode", "mock")
     monkeypatch.setattr(settings, "evidence_db_path", str(tmp_path / "evidence.db"))
+    monkeypatch.setattr(settings, "bitagent_access_control_mode", "observe")
 
 
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.7.0"
+    assert response.json()["version"] == "0.8.0"
 
 
 def test_dashboard_mock_contract():
@@ -139,10 +140,53 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "0.7.0",
+        "version": "0.8.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
+
+
+def test_prohibited_actions_are_refused_even_for_admin():
+    response = client.post(
+        "/api/v0/policy/evaluate",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"capability": "transfer_funds"},
+    )
+
+    assert response.status_code == 200
+    decision = response.json()["decision"]
+    assert decision["allowed"] is False
+    assert decision["reason"] == "prohibited_by_read_only_boundary"
+    assert decision["action_executed"] is False
+    assert decision["audit"]["decision_hash"]
+
+
+def test_enforced_rbac_denies_anonymous_and_allows_viewer(monkeypatch):
+    monkeypatch.setattr(settings, "bitagent_access_control_mode", "enforced")
+
+    denied = client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
+    allowed = client.get(
+        "/api/v0/dashboard?market=BTC_USDT&days=30",
+        headers={"X-BitAgent-Role": "viewer"},
+    )
+
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["reason"] == "role_capability_denied"
+    assert allowed.status_code == 200
+
+
+def test_access_decisions_are_audited(monkeypatch):
+    monkeypatch.setattr(settings, "bitagent_access_control_mode", "enforced")
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
+
+    audit = client.get(
+        "/api/v0/audit/access/recent",
+        headers={"X-BitAgent-Role": "auditor"},
+    ).json()
+
+    assert len(audit["items"]) >= 2
+    assert any(item["allowed"] is False for item in audit["items"])
+    assert all(item["decision_hash"] for item in audit["items"])
 
 
 def test_feature_gaps_are_explicit():

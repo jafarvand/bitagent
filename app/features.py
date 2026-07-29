@@ -84,6 +84,27 @@ FEATURES = [
         "description": "Append-only ratings and corrections that never write upstream.",
     },
     {
+        "id": "rbac-policy",
+        "name": "Role capability policy",
+        "status": "partial",
+        "source": "X-BitAgent-Role pilot header",
+        "description": "Observe/enforced RBAC exists; production SSO/JWT identity proof is still required.",
+    },
+    {
+        "id": "refusal-policy",
+        "name": "Prohibited-action refusal",
+        "status": "available",
+        "source": "POST /api/v0/policy/evaluate",
+        "description": "Fund, trade, balance, user and configuration actions are always denied.",
+    },
+    {
+        "id": "access-audit",
+        "name": "Access decision audit",
+        "status": "available",
+        "source": "GET /api/v0/audit/access/recent",
+        "description": "Allowed, denied and observe-mode decisions are retained with hashes.",
+    },
+    {
         "id": "market",
         "name": "Market snapshot",
         "status": "available",

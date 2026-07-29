@@ -2,6 +2,18 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.8.0] - 2026-07-30
+
+### Added
+
+- Role/capability policy with observe and enforced modes.
+- Unconditional refusal catalogue for all prohibited exchange actions.
+- Append-only hashed audit records for access decisions.
+
+### Limitation
+
+- `X-BitAgent-Role` is a pilot role signal, not production SSO/JWT identity proof.
+
 ## [0.7.0] - 2026-07-30
 
 ### Added

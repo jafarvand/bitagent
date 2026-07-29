@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **0.7.0 — Executive Brief**
+Current release: **0.8.0 — Policy Guard**
 
 ## What version 0 shows
 
@@ -63,6 +63,8 @@ uvicorn app.main:app --reload
 - `GET /api/v0/briefs/daily`
 - `POST /api/v0/feedback` (local-only; never writes to the exchange)
 - `GET /api/v0/feedback/summary`
+- `POST /api/v0/policy/evaluate`
+- `GET /api/v0/audit/access/recent`
 - `GET /api/v0/users/{user_id}/{resource}` where resource is one of
   `summary`, `balances`, `trades`, `deposits`, `withdrawals`, `pnl`
 - `GET /health`
@@ -88,8 +90,9 @@ pytest
 | 0.4.0 | Aggregate evidence ledger and tamper-evident audit verification | Complete |
 | 0.5.0 | Historical trends, comparisons and freshness alerts | Complete |
 | 0.6.0 | Investigation reports and cited runbook guidance | Complete |
-| 0.7.0 | Executive brief and local operator feedback | Current |
-| 0.8.0 | RBAC, refusal policy and expanded audit | Planned |
+| 0.7.0 | Executive brief and local operator feedback | Complete |
+| 0.8.0 | Pilot RBAC, refusal policy and expanded access audit | Current |
+| 0.9.0 | Replay, security and UAT readiness tooling | Planned |
 | 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |
 
 ## Project documents

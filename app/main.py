@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -14,25 +14,45 @@ from app.exchange import ExchangeAPIError, exchange_client
 from app.evidence import (
     evidence_trends,
     feedback_summary,
+    recent_access_decisions,
     recent_evidence,
     record_dashboard,
     record_feedback,
+    record_access_decision,
     verify_chain,
 )
 from app.features import FEATURES
 from app.incidents import detect_withdrawal_slowdown
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
+from app.policy import evaluate_policy
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
-    description="Read-only executive briefs and local operator feedback.",
+    description="Read-only policy enforcement, refusal and access audit.",
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+
+
+def authorize(capability: str, role: str | None) -> dict:
+    enforced = settings.bitagent_access_control_mode == "enforced"
+    decision = evaluate_policy(role, capability, enforced=enforced)
+    decision["audit"] = record_access_decision(settings.evidence_db_path, decision)
+    if enforced and not decision["allowed"]:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "access_denied",
+                "capability": capability,
+                "reason": decision["reason"],
+                "decision_hash": decision["audit"]["decision_hash"],
+            },
+        )
+    return decision
 
 
 @app.get("/", include_in_schema=False)
@@ -51,18 +71,23 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Executive Brief",
+        "release": "Policy Guard",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
         "key_id_configured": bool(key_id),
         "secret_configured": bool(secret),
         "timestamp": datetime.now(UTC).isoformat(),
+        "access_control_mode": settings.bitagent_access_control_mode,
+        "identity_proof": "pilot_role_header_only",
     }
 
 
 @app.get("/api/v0/features")
-async def features():
+async def features(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_features", role)
     counts = {
         state: sum(feature["status"] == state for feature in FEATURES)
         for state in ("available", "partial", "missing")
@@ -89,7 +114,9 @@ async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:
 async def dashboard(
     market: str = Query(default=settings.bitagent_default_market, pattern=r"^[A-Z0-9]+_[A-Z0-9]+$"),
     days: int = Query(default=30, ge=1, le=366),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
+    authorize("view_aggregate", role)
     try:
         operations, market_data = await fetch_dashboard(market, days)
     except ExchangeAPIError as exc:
@@ -132,17 +159,28 @@ async def dashboard(
 
 
 @app.get("/api/v0/evidence/recent")
-async def evidence_recent(limit: int = Query(default=20, ge=1, le=100)):
+async def evidence_recent(
+    limit: int = Query(default=20, ge=1, le=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_aggregate", role)
     return {"version": VERSION, "items": recent_evidence(settings.evidence_db_path, limit)}
 
 
 @app.get("/api/v0/audit/verify")
-async def audit_verify():
+async def audit_verify(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
     return {"version": VERSION, **verify_chain(settings.evidence_db_path)}
 
 
 @app.get("/api/v0/trends")
-async def trends(limit: int = Query(default=30, ge=2, le=1000)):
+async def trends(
+    limit: int = Query(default=30, ge=2, le=1000),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_aggregate", role)
     return {
         "version": VERSION,
         **evidence_trends(
@@ -156,7 +194,9 @@ async def trends(limit: int = Query(default=30, ge=2, le=1000)):
 @app.get("/api/v0/investigations/withdrawal-slowdown")
 async def investigate_withdrawal_slowdown(
     trend_limit: int = Query(default=30, ge=2, le=1000),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
+    authorize("view_brief", role)
     return {
         "version": VERSION,
         **withdrawal_investigation(
@@ -168,7 +208,11 @@ async def investigate_withdrawal_slowdown(
 
 
 @app.get("/api/v0/briefs/daily")
-async def daily_brief(trend_limit: int = Query(default=30, ge=2, le=1000)):
+async def daily_brief(
+    trend_limit: int = Query(default=30, ge=2, le=1000),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_brief", role)
     return {
         "version": VERSION,
         **daily_executive_brief(
@@ -186,7 +230,11 @@ class FeedbackRequest(BaseModel):
 
 
 @app.post("/api/v0/feedback", status_code=201)
-async def submit_feedback(feedback: FeedbackRequest):
+async def submit_feedback(
+    feedback: FeedbackRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("submit_feedback", role)
     return {
         "version": VERSION,
         "feedback": record_feedback(
@@ -200,8 +248,41 @@ async def submit_feedback(feedback: FeedbackRequest):
 
 
 @app.get("/api/v0/feedback/summary")
-async def get_feedback_summary():
+async def get_feedback_summary(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_brief", role)
     return {"version": VERSION, **feedback_summary(settings.evidence_db_path)}
+
+
+class PolicyEvaluationRequest(BaseModel):
+    capability: str = Field(min_length=1, max_length=100)
+
+
+@app.post("/api/v0/policy/evaluate")
+async def policy_evaluate(
+    request: PolicyEvaluationRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = evaluate_policy(
+        role,
+        request.capability,
+        enforced=settings.bitagent_access_control_mode == "enforced",
+    )
+    decision["audit"] = record_access_decision(settings.evidence_db_path, decision)
+    return {"version": VERSION, "decision": decision}
+
+
+@app.get("/api/v0/audit/access/recent")
+async def access_audit_recent(
+    limit: int = Query(default=50, ge=1, le=500),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    return {
+        "version": VERSION,
+        "items": recent_access_decisions(settings.evidence_db_path, limit),
+    }
 
 
 UserResource = Literal[
@@ -215,7 +296,9 @@ async def user_resource(
     resource: UserResource,
     date_from: str | None = None,
     date_to: str | None = None,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
+    authorize("view_user_investigation", role)
     if settings.bitagent_mode == "mock":
         return {
             "mode": "mock",

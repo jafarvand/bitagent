@@ -47,6 +47,20 @@ def _connect(path: str) -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS access_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            role TEXT NOT NULL,
+            capability TEXT NOT NULL,
+            allowed INTEGER NOT NULL,
+            enforced INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            decision_hash TEXT NOT NULL UNIQUE
+        )
+        """
+    )
     return connection
 
 
@@ -267,3 +281,51 @@ def feedback_summary(path: str) -> dict:
         ).fetchall()
     counts = {row["rating"]: row["count"] for row in rows}
     return {"total": sum(counts.values()), "counts": counts}
+
+
+def record_access_decision(path: str, decision: dict) -> dict:
+    created_at = datetime.now(UTC).isoformat()
+    material = _canonical({"created_at": created_at, **decision})
+    decision_hash = hashlib.sha256(material.encode()).hexdigest()
+    with _connect(path) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO access_audit (
+                created_at, role, capability, allowed, enforced, reason, decision_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                created_at,
+                decision["role"],
+                decision["capability"],
+                int(decision["allowed"]),
+                int(decision["enforced"]),
+                decision["reason"],
+                decision_hash,
+            ),
+        )
+    return {
+        "id": cursor.lastrowid,
+        "created_at": created_at,
+        "decision_hash": decision_hash,
+    }
+
+
+def recent_access_decisions(path: str, limit: int) -> list[dict]:
+    with _connect(path) as connection:
+        rows = connection.execute(
+            """
+            SELECT id, created_at, role, capability, allowed, enforced,
+                   reason, decision_hash
+            FROM access_audit ORDER BY id DESC LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            **dict(row),
+            "allowed": bool(row["allowed"]),
+            "enforced": bool(row["enforced"]),
+        }
+        for row in rows
+    ]

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     market_range_critical_percent: Decimal = Decimal("10.00")
     evidence_db_path: str = ".data/bitagent.db"
     evidence_freshness_warning_seconds: int = 120
+    bitagent_access_control_mode: Literal["observe", "enforced"] = "observe"
 
     def exchange_credentials(self) -> tuple[str, str]:
         """Return explicit client credentials or the first server-style pair."""

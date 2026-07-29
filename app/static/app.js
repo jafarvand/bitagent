@@ -17,6 +17,7 @@ function setMode(status) {
   $("mode-pill").textContent = `${status.mode} mode`;
   $("mode-pill").className = `pill ${status.mode === "live" ? "good" : "warn"}`;
   $("system-state").textContent = status.mode === "live" ? "Live API" : "Safe preview";
+  $("policy-summary").textContent = `${status.access_control_mode} mode · pilot role header`;
 }
 
 function renderDashboard(payload) {
