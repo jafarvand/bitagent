@@ -2,6 +2,14 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.3.0] - 2026-07-30
+
+### Added
+
+- Decimal-safe market high-low range percentage and last-price position.
+- Versioned warning/critical range thresholds and bounded market severity.
+- Source freshness, confidence, limitations and no-action safety metadata.
+
 ## [0.2.0] - 2026-07-29
 
 ### Added

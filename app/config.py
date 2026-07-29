@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,6 +16,8 @@ class Settings(BaseSettings):
     bitagent_default_market: str = "BTC_USDT"
     withdrawal_pending_warning_threshold: int = 25
     withdrawal_pending_critical_threshold: int = 100
+    market_range_warning_percent: Decimal = Decimal("5.00")
+    market_range_critical_percent: Decimal = Decimal("10.00")
 
     def exchange_credentials(self) -> tuple[str, str]:
         """Return explicit client credentials or the first server-style pair."""

@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **0.2.0 — Slowdown Signal**
+Current release: **0.3.0 — Market Range Risk**
 
 ## What version 0 shows
 
@@ -76,8 +76,9 @@ pytest
 |---|---|---|
 | 0.0.1 | API connector, mock/live mode, minimum dashboard, coverage matrix | Complete |
 | 0.1.0 | Secure key-ID signing, replay resistance, complete schemas, readiness UI | Complete |
-| 0.2.0 | Deterministic withdrawal signal, evidence contract and incident timeline | Current |
-| 0.3.0 | Treasury, liabilities, reconciliation and risk thresholds | Planned |
+| 0.2.0 | Deterministic withdrawal signal, evidence contract and incident timeline | Complete |
+| 0.3.0 | Decimal-safe market range analytics and bounded risk evidence | Current |
+| 0.4.0 | Treasury, liabilities and reconciliation (requires upstream endpoints) | Blocked |
 | 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |
 
 ## Project documents

@@ -49,6 +49,14 @@ function renderDashboard(payload) {
     `<li><time>${new Date(item.at).toLocaleTimeString()}</time><span>${item.event}</span></li>`
   ).join("");
   $("incident-guidance").textContent = incident.recommended_investigation;
+  const risk = payload.market_risk;
+  $("risk-market").textContent = `${risk.market} evidence window`;
+  $("risk-severity").textContent = risk.severity;
+  $("risk-severity").className = `pill ${risk.severity === "healthy" ? "good" : "warn"}`;
+  $("range-percent").textContent = risk.metrics.range_percent === null ? "Unavailable" : `${risk.metrics.range_percent}%`;
+  $("range-position").textContent = risk.metrics.last_position_percent === null ? "Unavailable" : `${risk.metrics.last_position_percent}%`;
+  $("risk-confidence").textContent = risk.confidence;
+  $("range-thresholds").textContent = `warning ${risk.thresholds.warning_range_percent}% · critical ${risk.thresholds.critical_range_percent}%`;
   $("updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
 }
 

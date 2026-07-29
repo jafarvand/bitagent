@@ -11,17 +11,17 @@
     <a class="brand" href="/"><span class="brand-mark">b</span><span>bitAgent</span></a>
     <div class="top-actions">
       <span id="mode-pill" class="pill neutral">connecting</span>
-      <span class="release-chip">SLOWDOWN SIGNAL</span>
-      <span class="version">v<span id="version">0.2.0</span></span>
+      <span class="release-chip">MARKET RANGE RISK</span>
+      <span class="version">v<span id="version">0.3.0</span></span>
     </div>
   </header>
 
   <main>
     <section class="hero">
       <div>
-        <p class="eyebrow">VERSION 0.2 · SLOWDOWN SIGNAL</p>
-        <h1>See the backlog.<br><span>Know the evidence.</span></h1>
-        <p class="intro">Version 0.2.0 turns aggregate withdrawal evidence into a deterministic, auditable incident signal—with explicit thresholds, confidence, limitations, and no autonomous action.</p>
+        <p class="eyebrow">VERSION 0.3 · MARKET RANGE RISK</p>
+        <h1>Measure the move.<br><span>Keep the boundary.</span></h1>
+        <p class="intro">Version 0.3.0 adds decimal-safe market range analytics to the live operations signal—measured from available OHLC evidence without pretending it can see spread, depth, exposure, or treasury.</p>
       </div>
       <div class="hero-status">
         <span class="pulse"></span>
@@ -30,9 +30,22 @@
     </section>
 
     <section class="release-strip">
-      <div><span class="release-icon">01</span><p><strong>Deterministic severity</strong><small>Observed count vs versioned threshold</small></p></div>
-      <div><span class="release-icon">02</span><p><strong>Evidence attached</strong><small>Source, request ID and freshness</small></p></div>
-      <div><span class="release-icon">03</span><p><strong>Boundary stays visible</strong><small>Missing age, queue and worker data</small></p></div>
+      <div><span class="release-icon">01</span><p><strong>Decimal-safe range</strong><small>High-low movement without float drift</small></p></div>
+      <div><span class="release-icon">02</span><p><strong>Price position</strong><small>Last price located inside the range</small></p></div>
+      <div><span class="release-icon">03</span><p><strong>Bounded conclusion</strong><small>No spread, depth or exposure claims</small></p></div>
+    </section>
+
+    <section class="panel risk-panel">
+      <div class="panel-head">
+        <div><p class="eyebrow">MARKET RANGE ANALYTICS</p><h2 id="risk-market">BTC_USDT evidence window</h2></div>
+        <span id="risk-severity" class="pill neutral">—</span>
+      </div>
+      <div class="risk-grid">
+        <div><span>High-low range</span><strong id="range-percent">—</strong><small id="range-thresholds">Waiting for thresholds</small></div>
+        <div><span>Last-price position</span><strong id="range-position">—</strong><small>0% at low · 100% at high</small></div>
+        <div><span>Confidence</span><strong id="risk-confidence">—</strong><small>Bounded to summary evidence</small></div>
+      </div>
+      <div class="risk-boundary"><strong>Risk boundary</strong><span>Observed range is not statistical volatility. Spread, order-book depth, reference divergence, exposure, and treasury remain unavailable.</span></div>
     </section>
 
     <section class="controls">
@@ -93,14 +106,14 @@
 
     <section class="panel coverage">
       <div class="panel-head">
-        <div><p class="eyebrow">0.2.0 CAPABILITY MAP</p><h2>Incident readiness, without blind spots</h2></div>
+        <div><p class="eyebrow">0.3.0 CAPABILITY MAP</p><h2>Operations and market evidence, without blind spots</h2></div>
         <div id="coverage-counts" class="coverage-counts"></div>
       </div>
       <div id="features" class="feature-list"></div>
     </section>
   </main>
 
-  <footer>bitAgent 0.2.0 · Slowdown Signal · Read-only by architecture · No action executed</footer>
+  <footer>bitAgent 0.3.0 · Market Range Risk · Read-only by architecture · No action executed</footer>
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -35,6 +35,13 @@ FEATURES = [
         "description": "Activity, price, OHLC and volume for one selected market.",
     },
     {
+        "id": "market-range-risk",
+        "name": "Market range risk",
+        "status": "partial",
+        "source": "Rule market-range-percent@1.0.0",
+        "description": "Analyzer is ready; live calculation requires non-zero upstream OHLC evidence.",
+    },
+    {
         "id": "user-investigation",
         "name": "User investigation",
         "status": "available",
@@ -114,8 +121,8 @@ FEATURES = [
     {
         "id": "liquidity",
         "name": "Liquidity risk",
-        "status": "missing",
+        "status": "partial",
         "source": "Order-book endpoint required",
-        "description": "Spread and depth cannot be calculated from the current market summary.",
+        "description": "Range risk exists; spread, depth and divergence still require new endpoints.",
     },
 ]

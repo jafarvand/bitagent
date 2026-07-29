@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.exchange import ExchangeClient
 from app.main import app
+from app.market_risk import analyze_market_range
 
 
 client = TestClient(app)
@@ -20,7 +21,7 @@ def mock_mode(monkeypatch):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.2.0"
+    assert response.json()["version"] == "0.3.0"
 
 
 def test_dashboard_mock_contract():
@@ -39,6 +40,15 @@ def test_dashboard_mock_contract():
     }
     assert incident["action_executed"] is False
     assert incident["confidence"] == "limited"
+    market_risk = body["market_risk"]
+    assert market_risk["severity"] == "healthy"
+    assert market_risk["metrics"]["range_percent"] == "2.74"
+    assert market_risk["metrics"]["last_position_percent"] == "60.86"
+    assert market_risk["action_executed"] is False
+    assert market_risk["data_quality"] == {
+        "valid": True,
+        "missing_or_invalid_fields": [],
+    }
 
 
 def test_feature_gaps_are_explicit():
@@ -53,6 +63,18 @@ def test_feature_gaps_are_explicit():
 def test_invalid_market_is_rejected():
     response = client.get("/api/v0/dashboard?market=bad-market")
     assert response.status_code == 422
+
+
+def test_market_risk_fails_closed_for_zero_ohlc():
+    result = analyze_market_range(
+        {"data": {"market": "BTC_USDT", "low": "0", "high": "0", "last": "1"}},
+        warning_percent=settings.market_range_warning_percent,
+        critical_percent=settings.market_range_critical_percent,
+    )
+
+    assert result["severity"] == "unknown"
+    assert result["confidence"] == "insufficient"
+    assert result["data_quality"]["missing_or_invalid_fields"] == ["low", "high"]
 
 
 def test_v02_signature_covers_sorted_query_and_empty_body_hash(monkeypatch):

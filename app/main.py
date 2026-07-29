@@ -11,14 +11,15 @@ from app.config import settings
 from app.exchange import ExchangeAPIError, exchange_client
 from app.features import FEATURES
 from app.incidents import detect_withdrawal_slowdown
+from app.market_risk import analyze_market_range
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
-    description="Read-only exchange operations evidence and incident dashboard.",
+    description="Read-only exchange operations and bounded market-risk dashboard.",
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -39,7 +40,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Slowdown Signal",
+        "release": "Market Range Risk",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -89,12 +90,18 @@ async def dashboard(
         warning_threshold=settings.withdrawal_pending_warning_threshold,
         critical_threshold=settings.withdrawal_pending_critical_threshold,
     )
+    market_risk = analyze_market_range(
+        market_data,
+        warning_percent=settings.market_range_warning_percent,
+        critical_percent=settings.market_range_critical_percent,
+    )
     return {
         "version": VERSION,
         "mode": settings.bitagent_mode,
         "operations": operations,
         "market": market_data,
         "incident": incident,
+        "market_risk": market_risk,
         "signals": [
             {
                 "severity": "warning" if pending else "healthy",
