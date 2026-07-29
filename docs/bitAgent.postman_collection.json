@@ -1,0 +1,92 @@
+{
+  "info": {
+    "name": "Bitimen bitAgent read-only pilot",
+    "description": "Read-only BotController endpoints on exchange-backend. Set collection variables base_url and bot_token before running; the pre-request script signs every call automatically per Core\\Security\\BotServiceAuth.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://devapi.zekabot.com" },
+    { "key": "bot_token", "value": "REPLACE_ME" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const CryptoJS = require('crypto-js');",
+          "const url = require('url');",
+          "const path = url.parse(pm.request.url.toString().replace('{{base_url}}', '')).pathname;",
+          "const method = pm.request.method.toUpperCase();",
+          "const ts = Math.floor(Date.now() / 1000).toString();",
+          "const rid = pm.variables.replaceIn('{{$guid}}');",
+          "const secret = pm.collectionVariables.get('bot_token');",
+          "const canonical = [method, path, ts, rid.toLowerCase()].join('\\n');",
+          "const sig = CryptoJS.HmacSHA256(canonical, secret).toString(CryptoJS.enc.Hex);",
+          "pm.request.headers.upsert({ key: 'X-Exchange-Bot-Authorization', value: 'Bearer ' + secret });",
+          "pm.request.headers.upsert({ key: 'X-Request-Timestamp', value: ts });",
+          "pm.request.headers.upsert({ key: 'X-Request-ID', value: rid });",
+          "pm.request.headers.upsert({ key: 'X-Request-Signature', value: sig });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Operations (aggregate deposits/withdrawals/orders)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/bot/operations?date_from=2026-06-29&date_to=2026-07-29", "host": ["{{base_url}}"], "path": ["api","bot","operations"], "query": [{"key":"date_from","value":"2026-06-29"},{"key":"date_to","value":"2026-07-29"}] }
+      }
+    },
+    {
+      "name": "Market summary",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/bot/market/BTC_USDT/summary", "host": ["{{base_url}}"], "path": ["api","bot","market","BTC_USDT","summary"] }
+      }
+    },
+    {
+      "name": "User summary",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/bot/user/1/summary", "host": ["{{base_url}}"], "path": ["api","bot","user","1","summary"] }
+      }
+    },
+    {
+      "name": "User balances",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/bot/user/1/balances", "host": ["{{base_url}}"], "path": ["api","bot","user","1","balances"] }
+      }
+    },
+    {
+      "name": "User trades",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/bot/user/1/trades", "host": ["{{base_url}}"], "path": ["api","bot","user","1","trades"] }
+      }
+    },
+    {
+      "name": "User deposits",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/bot/user/1/deposits", "host": ["{{base_url}}"], "path": ["api","bot","user","1","deposits"] }
+      }
+    },
+    {
+      "name": "User withdrawals",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/bot/user/1/withdrawals", "host": ["{{base_url}}"], "path": ["api","bot","user","1","withdrawals"] }
+      }
+    },
+    {
+      "name": "User PnL",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{base_url}}/api/bot/user/1/pnl", "host": ["{{base_url}}"], "path": ["api","bot","user","1","pnl"] }
+      }
+    }
+  ]
+}

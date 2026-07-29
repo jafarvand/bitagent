@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>bitAgent · Exchange visibility</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">b</span><span>bitAgent</span></a>
+    <div class="top-actions">
+      <span id="mode-pill" class="pill neutral">connecting</span>
+      <span class="version">v<span id="version">0.0.1</span></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">READ-ONLY EXCHANGE COPILOT</p>
+        <h1>Know what your exchange<br><span>is doing now.</span></h1>
+        <p class="intro">Version 0 turns the APIs you already have into one honest operational view—evidence first, no autonomous actions.</p>
+      </div>
+      <div class="hero-status">
+        <span class="pulse"></span>
+        <div><strong id="system-state">Loading</strong><small>data connection</small></div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <label>Market <input id="market" value="BTC_USDT" maxlength="20"></label>
+      <label>Period
+        <select id="days"><option value="1">24 hours</option><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select>
+      </label>
+      <button id="refresh">Refresh view</button>
+      <span id="updated">Not loaded</span>
+    </section>
+
+    <section class="metrics" id="metrics">
+      <article><span>Orders</span><strong>—</strong><small>selected period</small></article>
+      <article><span>Deposits</span><strong>—</strong><small>selected period</small></article>
+      <article><span>Withdrawals</span><strong>—</strong><small>selected period</small></article>
+      <article class="attention"><span>Pending withdrawals</span><strong>—</strong><small>requires attention</small></article>
+    </section>
+
+    <section class="grid">
+      <article class="panel market-panel">
+        <div class="panel-head"><div><p class="eyebrow">MARKET SNAPSHOT</p><h2 id="market-name">BTC / USDT</h2></div><span id="market-active" class="pill neutral">—</span></div>
+        <div class="price"><strong id="last-price">—</strong><span id="quote">USDT</span></div>
+        <div class="ohlc">
+          <div><span>Open</span><strong id="open">—</strong></div>
+          <div><span>High</span><strong id="high">—</strong></div>
+          <div><span>Low</span><strong id="low">—</strong></div>
+          <div><span>Volume</span><strong id="volume">—</strong></div>
+        </div>
+      </article>
+
+      <article class="panel signal-panel">
+        <div class="panel-head"><div><p class="eyebrow">FIRST SIGNAL</p><h2>Withdrawal flow</h2></div><span id="severity" class="pill neutral">—</span></div>
+        <div class="signal-number" id="pending-large">—</div>
+        <p id="signal-text">Waiting for evidence.</p>
+        <div class="boundary"><strong>Current boundary</strong><span>Count is visible. Age, queues, workers and root cause need new API endpoints.</span></div>
+      </article>
+    </section>
+
+    <section class="panel coverage">
+      <div class="panel-head">
+        <div><p class="eyebrow">VERSION 0 COVERAGE</p><h2>What we have—and what we need</h2></div>
+        <div id="coverage-counts" class="coverage-counts"></div>
+      </div>
+      <div id="features" class="feature-list"></div>
+    </section>
+  </main>
+
+  <footer>bitAgent 0.0.1 · Read-only by architecture · Every missing capability stays visible</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

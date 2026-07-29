@@ -1,0 +1,89 @@
+# bitAgent
+
+Read-only Exchange Operations & Risk Copilot.
+
+Current release: **0.0.1 — Visibility Shell**
+
+## What version 0 shows
+
+- Exchange API connection state and response freshness
+- 30-day operations totals
+- Pending-withdrawal warning
+- Single-market snapshot
+- Feature/API coverage matrix
+- Explicit gaps: treasury, liabilities, queues, workers, reconciliation, order-book risk
+- Mock mode for safe local evaluation
+- Live mode using the exchange's current HMAC protocol
+
+No trade, transfer, withdrawal, balance, user, or configuration write action exists.
+
+## Run
+
+Python 3.11+ and Docker are supported.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Open <http://localhost:8000>.
+
+Without credentials the app starts in `mock` mode. For live read-only data, edit
+`.env`:
+
+```env
+BITAGENT_MODE=live
+EXCHANGE_API_BASE_URL=https://devapi.zekabot.com
+EXCHANGE_BOT_TOKEN=replace-locally
+```
+
+Never commit `.env` or a real token.
+
+## Local Python run
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+## API
+
+- `GET /api/v0/status`
+- `GET /api/v0/features`
+- `GET /api/v0/dashboard?market=BTC_USDT&days=30`
+- `GET /api/v0/users/{user_id}/{resource}` where resource is one of
+  `summary`, `balances`, `trades`, `deposits`, `withdrawals`, `pnl`
+- `GET /health`
+
+The user-resource proxy is disabled in the UI by default because it can expose
+user-level financial data. It remains read-only and requires a deliberate API
+call.
+
+## Tests
+
+```bash
+pytest
+```
+
+## Version plan
+
+| Version | Focus | Status |
+|---|---|---|
+| 0.0.1 | API connector, mock/live mode, minimum dashboard, coverage matrix | Current |
+| 0.1.0 | Complete schemas, secure key-ID signing, pagination, health/queue endpoints | Planned |
+| 0.2.0 | Withdrawal/deposit slowdown detection and incident timeline | Planned |
+| 0.3.0 | Treasury, liabilities, reconciliation and risk thresholds | Planned |
+| 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |
+
+## Project documents
+
+- [MVP plan and task board](docs/planning/mvp-v0.md)
+- [Approved 16-week project plan](docs/planning/project-plan.md)
+- [Master operations runbook](docs/runbooks/master-runbook.md)
+- [Architecture](docs/architecture/version-0.md)
+- [API contract and Postman collection](docs/api/)
+- [Security decision: read-only first](docs/decisions/0001-read-only-first.md)
+- [Changelog](CHANGELOG.md)

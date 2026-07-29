@@ -1,0 +1,269 @@
+openapi: 3.0.3
+info:
+  title: Bitimen exchange-backend — bitAgent read-only pilot API
+  description: >
+    Read-only, service-to-service endpoints exposed for the bitAgent monitoring
+    pilot (withdrawal/deposit slowdown investigation). All routes are GET-only
+    and live in Rest\Controller\BotController on exchange-backend. No write,
+    trade, transfer, or withdrawal endpoints are exposed here by design.
+  version: "0.1.0-pilot"
+servers:
+  - url: https://devapi.zekabot.com
+    description: exchange-backend (VIRTUAL_HOST devapi.zekabot.com / apistage2.zekabot.com)
+security:
+  - botServiceAuth: []
+paths:
+  /api/bot/operations:
+    get:
+      summary: Aggregated deposit/withdrawal/order counts for a date range
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+
+  /api/bot/market/{marketIdentifier}/summary:
+    get:
+      summary: Single market ticker/status snapshot
+      parameters:
+        - name: marketIdentifier
+          in: path
+          required: true
+          schema: { type: string, example: BTC_USDT }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketSummaryResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '404': { description: Market not found }
+        '422': { description: Invalid market identifier format }
+
+  /api/bot/user/{userId}/summary:
+    get:
+      summary: Account status, KYC level, open/completed order counts for one user
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/AuthError' }
+        '404': { description: User not found }
+
+  /api/bot/user/{userId}/balances:
+    get:
+      summary: Per-asset available/blocked/total balances and IRT valuation for one user
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/AuthError' }
+        '404': { description: User not found }
+        '502': { description: Matching engine did not return balances }
+
+  /api/bot/user/{userId}/trades:
+    get:
+      summary: Executed trades for one user in a date range
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/AuthError' }
+        '404': { description: User not found }
+
+  /api/bot/user/{userId}/deposits:
+    get:
+      summary: Deposit records for one user in a date range (tx hash/destination masked)
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepositsResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '404': { description: User not found }
+
+  /api/bot/user/{userId}/withdrawals:
+    get:
+      summary: Withdrawal records for one user in a date range (tx hash/destination masked)
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalsResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '404': { description: User not found }
+
+  /api/bot/user/{userId}/pnl:
+    get:
+      summary: Execution PnL for one user in a date range (partial — cost-basis ledger not connected yet)
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/AuthError' }
+        '404': { description: User not found }
+
+components:
+  securitySchemes:
+    botServiceAuth:
+      type: apiKey
+      in: header
+      name: X-Exchange-Bot-Authorization
+      description: >
+        Not a plain API key. Custom HMAC-SHA256 request signing implemented in
+        Core\Security\BotServiceAuth. See docs/bitAgent/README.md "Authentication"
+        section for the exact signing recipe — the standard Authorization header
+        does not reach PHP on this Apache/mod_php build, so the bearer token must
+        be sent via X-Exchange-Bot-Authorization instead.
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: integer }
+    DateFrom:
+      name: date_from
+      in: query
+      schema: { type: string, format: date-time }
+      description: Defaults to 30 days before date_to. Clamped to 366 days before date_to.
+    DateTo:
+      name: date_to
+      in: query
+      schema: { type: string, format: date-time }
+      description: Defaults to now.
+
+  responses:
+    AuthError:
+      description: Missing/invalid signature, expired timestamp, or IP not allowlisted
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code: { type: string, example: service_auth_failed }
+                  message: { type: string }
+                  request_id: { type: string }
+
+  schemas:
+    OperationsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            date_from: { type: string }
+            date_to: { type: string }
+            orders: { type: integer }
+            deposits: { type: integer }
+            withdrawals: { type: integer }
+            pending_withdrawals: { type: integer }
+            failed_deposits: { type: integer }
+            fee_revenue_by_asset:
+              type: object
+              additionalProperties: { type: string }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    MarketSummaryResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            market: { type: string }
+            is_active: { type: boolean }
+            base_asset: { type: string }
+            quote_asset: { type: string }
+            last: { type: string }
+            open: { type: string }
+            high: { type: string }
+            low: { type: string }
+            volume: { type: string }
+            as_of: { type: string }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    DepositsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            user_id: { type: integer }
+            date_from: { type: string }
+            date_to: { type: string }
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  deposit_id: { type: integer }
+                  asset: { type: string }
+                  amount: { type: string }
+                  net_amount: { type: string }
+                  status: { type: string, enum: [rejected, pending, confirmed, processing, unknown] }
+                  transaction_hash: { type: string, description: masked, nullable: true }
+                  destination: { type: string, description: masked, nullable: true }
+                  confirmed_at: { type: string, nullable: true }
+                  created_at: { type: string }
+                  cost_basis_mark_irt: { type: "null" }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    WithdrawalsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            user_id: { type: integer }
+            date_from: { type: string }
+            date_to: { type: string }
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  withdrawal_id: { type: integer }
+                  asset: { type: string }
+                  requested_amount: { type: string }
+                  sent_amount: { type: string }
+                  fee: { type: string }
+                  status: { type: string, enum: [cancelled, completed, processing, verified, pending] }
+                  destination: { type: string, description: masked, nullable: true }
+                  transaction_hash: { type: string, description: masked, nullable: true }
+                  created_at: { type: string }
+                  updated_at: { type: string }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string }
+        generated_at: { type: string }
+        currency: { type: string, example: IRT }
+        data_freshness_seconds: { type: integer }
