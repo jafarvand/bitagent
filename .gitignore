@@ -6,6 +6,7 @@ __pycache__/
 .coverage
 htmlcov/
 .bitagent-server*.log
+.data/
 dist/
 build/
 .DS_Store

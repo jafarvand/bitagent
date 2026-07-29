@@ -71,19 +71,28 @@ function renderFeatures(payload) {
     </div>`).join("");
 }
 
+function renderAudit(payload) {
+  $("audit-summary").textContent = payload.valid
+    ? `${payload.records} records · chain valid`
+    : `Integrity failure at record ${payload.failed_at_id}`;
+  $("audit-summary").className = payload.valid ? "" : "error";
+}
+
 async function load() {
   $("refresh").disabled = true;
   try {
     const market = $("market").value.trim().toUpperCase();
     const days = $("days").value;
-    const [status, dashboard, features] = await Promise.all([
+    const [status, dashboard, features, audit] = await Promise.all([
       json("/api/v0/status"),
       json(`/api/v0/dashboard?market=${encodeURIComponent(market)}&days=${days}`),
-      json("/api/v0/features")
+      json("/api/v0/features"),
+      json("/api/v0/audit/verify")
     ]);
     setMode(status);
     renderDashboard(dashboard);
     renderFeatures(features);
+    renderAudit(audit);
   } catch (error) {
     $("system-state").textContent = "Connection error";
     $("system-state").className = "error";

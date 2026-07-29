@@ -2,6 +2,14 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.4.0] - 2026-07-30
+
+### Added
+
+- Local aggregate evidence persistence with no user-level records or secrets.
+- Append-only SHA-256 hash chaining and full-chain integrity verification.
+- Recent-evidence and audit-verification read APIs.
+
 ## [0.3.0] - 2026-07-30
 
 ### Added

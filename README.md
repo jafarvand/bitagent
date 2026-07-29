@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **0.3.0 — Market Range Risk**
+Current release: **0.4.0 — Evidence Ledger**
 
 ## What version 0 shows
 
@@ -56,6 +56,8 @@ uvicorn app.main:app --reload
 - `GET /api/v0/status`
 - `GET /api/v0/features`
 - `GET /api/v0/dashboard?market=BTC_USDT&days=30`
+- `GET /api/v0/evidence/recent?limit=20`
+- `GET /api/v0/audit/verify`
 - `GET /api/v0/users/{user_id}/{resource}` where resource is one of
   `summary`, `balances`, `trades`, `deposits`, `withdrawals`, `pnl`
 - `GET /health`
@@ -77,8 +79,9 @@ pytest
 | 0.0.1 | API connector, mock/live mode, minimum dashboard, coverage matrix | Complete |
 | 0.1.0 | Secure key-ID signing, replay resistance, complete schemas, readiness UI | Complete |
 | 0.2.0 | Deterministic withdrawal signal, evidence contract and incident timeline | Complete |
-| 0.3.0 | Decimal-safe market range analytics and bounded risk evidence | Current |
-| 0.4.0 | Treasury, liabilities and reconciliation (requires upstream endpoints) | Blocked |
+| 0.3.0 | Decimal-safe market range analytics and bounded risk evidence | Complete |
+| 0.4.0 | Aggregate evidence ledger and tamper-evident audit verification | Current |
+| 0.5.0 | Historical trends, comparisons and freshness alerts | Planned |
 | 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |
 
 ## Project documents

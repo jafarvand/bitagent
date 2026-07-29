@@ -28,6 +28,20 @@ FEATURES = [
         "description": "Orders, deposits, withdrawals, pending withdrawals and fees.",
     },
     {
+        "id": "evidence-ledger",
+        "name": "Aggregate evidence ledger",
+        "status": "available",
+        "source": "SQLite + SHA-256 chain",
+        "description": "Dashboard evidence is retained locally with tamper-evident linkage.",
+    },
+    {
+        "id": "audit-verification",
+        "name": "Audit integrity verification",
+        "status": "available",
+        "source": "GET /api/v0/audit/verify",
+        "description": "Every stored record can be verified from genesis to the current head.",
+    },
+    {
         "id": "market",
         "name": "Market snapshot",
         "status": "available",

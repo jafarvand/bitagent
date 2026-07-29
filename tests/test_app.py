@@ -14,14 +14,15 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def mock_mode(monkeypatch):
+def mock_mode(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "bitagent_mode", "mock")
+    monkeypatch.setattr(settings, "evidence_db_path", str(tmp_path / "evidence.db"))
 
 
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.3.0"
+    assert response.json()["version"] == "0.4.0"
 
 
 def test_dashboard_mock_contract():
@@ -49,6 +50,20 @@ def test_dashboard_mock_contract():
         "valid": True,
         "missing_or_invalid_fields": [],
     }
+    assert body["evidence_record"]["id"] == 1
+
+
+def test_evidence_ledger_is_append_only_and_verifiable():
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=7")
+
+    recent = client.get("/api/v0/evidence/recent?limit=10").json()
+    verification = client.get("/api/v0/audit/verify").json()
+
+    assert [item["id"] for item in recent["items"]] == [2, 1]
+    assert all("payload_json" not in item for item in recent["items"])
+    assert verification["valid"] is True
+    assert verification["records"] == 2
 
 
 def test_feature_gaps_are_explicit():
