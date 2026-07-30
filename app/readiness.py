@@ -118,25 +118,37 @@ def uat_readiness(
     *,
     live_mode: bool,
     upstream_security: dict | None = None,
+    release_inputs: dict | None = None,
 ) -> dict:
     upstream_passed = bool(upstream_security and upstream_security.get("all_passed"))
+    release_inputs = release_inputs or {}
+    owner_incidents = release_inputs.get("owner_incidents", {})
+    external_security = release_inputs.get("external_security", {})
+    identity = release_inputs.get("production_identity", {})
+    approval = release_inputs.get("uat_approval", {})
     gates = [
         {"id": "automated-replay", "status": "pass" if replay["all_passed"] else "fail", "evidence": f"{replay['passed']}/{replay['total']} sanitized cases"},
         {"id": "local-security", "status": "pass" if security["all_passed"] else "fail", "evidence": f"{security['passed']}/{security['total']} local checks"},
         {"id": "prohibited-action-refusal", "status": "pass" if security["refusal_percent"] == 100 else "fail", "evidence": f"{security['refusal_percent']}% refused"},
         {"id": "live-read-smoke", "status": "pass" if live_mode else "pending", "evidence": "live mode configured" if live_mode else "run against staging read-only credentials"},
-        {"id": "owner-historical-incidents", "status": "pending", "evidence": "5-20 owner-approved incidents required"},
+        {
+            "id": "owner-historical-incidents",
+            "status": "pass" if owner_incidents.get("passed") else "pending",
+            "evidence": f"{len(owner_incidents.get('cases', []))} owner-approved incidents replayed" if owner_incidents.get("passed") else "5-20 owner-approved incidents required",
+        },
         {
             "id": "upstream-negative-security",
-            "status": "partial" if upstream_passed else "pending",
+            "status": "pass" if upstream_passed and external_security.get("passed") else ("partial" if upstream_passed else "pending"),
             "evidence": (
-                f"{upstream_security['passed']}/{upstream_security['total']} safe authentication probes passed; IP/scope/rotation/revocation remain"
+                f"{upstream_security['passed']}/{upstream_security['total']} safe probes plus owner security evidence"
+                if upstream_passed and external_security.get("passed")
+                else f"{upstream_security['passed']}/{upstream_security['total']} safe authentication probes passed; IP/scope/rotation/revocation remain"
                 if upstream_passed
                 else "replay/timestamp/tamper/IP/scope/rotation/revocation evidence required"
             ),
         },
-        {"id": "production-identity", "status": "pending", "evidence": "SSO/JWT, MFA and access review required"},
-        {"id": "owner-uat-approval", "status": "pending", "evidence": "operations and risk owner sign-off required"},
+        {"id": "production-identity", "status": "pass" if identity.get("passed") else "pending", "evidence": "validated owner identity evidence" if identity.get("passed") else "SSO/JWT, MFA and access review required"},
+        {"id": "owner-uat-approval", "status": "pass" if approval.get("passed") else "pending", "evidence": "operations and risk approvals validated" if approval.get("passed") else "operations and risk owner sign-off required"},
     ]
     passed = sum(gate["status"] == "pass" for gate in gates)
     return {

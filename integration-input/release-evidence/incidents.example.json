@@ -1,0 +1,44 @@
+{
+  "incidents": [
+    {
+      "incident_id": "replace-with-sanitized-id-1",
+      "owner": "operations-owner-name",
+      "approved_at": "2026-07-30T00:00:00Z",
+      "pending_withdrawals": 0,
+      "withdrawals": 100,
+      "expected_severity": "healthy"
+    },
+    {
+      "incident_id": "replace-with-sanitized-id-2",
+      "owner": "operations-owner-name",
+      "approved_at": "2026-07-30T00:00:00Z",
+      "pending_withdrawals": 8,
+      "withdrawals": 100,
+      "expected_severity": "notice"
+    },
+    {
+      "incident_id": "replace-with-sanitized-id-3",
+      "owner": "operations-owner-name",
+      "approved_at": "2026-07-30T00:00:00Z",
+      "pending_withdrawals": 25,
+      "withdrawals": 100,
+      "expected_severity": "warning"
+    },
+    {
+      "incident_id": "replace-with-sanitized-id-4",
+      "owner": "operations-owner-name",
+      "approved_at": "2026-07-30T00:00:00Z",
+      "pending_withdrawals": 42,
+      "withdrawals": 200,
+      "expected_severity": "warning"
+    },
+    {
+      "incident_id": "replace-with-sanitized-id-5",
+      "owner": "operations-owner-name",
+      "approved_at": "2026-07-30T00:00:00Z",
+      "pending_withdrawals": 100,
+      "withdrawals": 200,
+      "expected_severity": "critical"
+    }
+  ]
+}

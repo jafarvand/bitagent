@@ -11,6 +11,7 @@ from app.exchange import ExchangeClient
 from app.evidence import backup_and_verify, record_dashboard
 from app.main import app
 from app.market_risk import analyze_market_range
+from app.release_inputs import validate_release_inputs
 
 
 client = TestClient(app)
@@ -31,7 +32,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.9.2"
+    assert response.json()["version"] == "0.9.3"
 
 
 def test_dashboard_mock_contract():
@@ -160,7 +161,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "0.9.2",
+        "version": "0.9.3",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -229,7 +230,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "0.9.2"
+    assert report["version"] == "0.9.3"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -263,6 +264,59 @@ def test_readiness_loads_credential_free_upstream_probe():
     assert "IP/scope/rotation/revocation remain" in gates[
         "upstream-negative-security"
     ]["evidence"]
+
+
+def test_release_owner_inputs_are_validated_and_replayed(tmp_path):
+    root = tmp_path / "release-evidence"
+    root.mkdir()
+    incidents = {
+        "incidents": [
+            {
+                "incident_id": f"incident-{index}",
+                "owner": "test-owner",
+                "approved_at": "2026-07-30T00:00:00Z",
+                "pending_withdrawals": pending,
+                "withdrawals": 200,
+                "expected_severity": expected,
+            }
+            for index, (pending, expected) in enumerate(
+                [(0, "healthy"), (5, "notice"), (25, "warning"), (42, "warning"), (100, "critical")],
+                start=1,
+            )
+        ]
+    }
+    (root / "incidents.local.json").write_text(json.dumps(incidents), encoding="utf-8")
+    (root / "security.local.json").write_text(json.dumps({
+        "approved_by": "security-owner",
+        "approved_at": "2026-07-30T00:00:00Z",
+        "non_allowlisted_ip_denied": True,
+        "wrong_scope_denied": True,
+        "rotation_tested": True,
+        "revocation_tested": True,
+    }), encoding="utf-8")
+    (root / "identity.local.json").write_text(json.dumps({
+        "approved_by": "identity-owner",
+        "approved_at": "2026-07-30T00:00:00Z",
+        "sso_jwt_enabled": True,
+        "mfa_required": True,
+        "access_review_complete": True,
+    }), encoding="utf-8")
+    (root / "uat-approval.local.json").write_text(json.dumps({
+        "approved_at": "2026-07-30T00:00:00Z",
+        "operations_approver": "operations-owner",
+        "risk_approver": "risk-owner",
+        "operations_approved": True,
+        "risk_approved": True,
+    }), encoding="utf-8")
+
+    result = validate_release_inputs(
+        str(root), warning_threshold=25, critical_threshold=100
+    )
+
+    assert result["all_passed"] is True
+    assert result["contains_credentials"] is False
+    assert len(result["owner_incidents"]["cases"]) == 5
+    assert all(item["sha256"] for key, item in result.items() if isinstance(item, dict) and item.get("status") == "valid")
 
 
 def test_feature_gaps_are_explicit():

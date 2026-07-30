@@ -1,0 +1,7 @@
+{
+  "approved_at": "2026-07-30T00:00:00Z",
+  "operations_approver": "operations-owner-name",
+  "risk_approver": "risk-owner-name",
+  "operations_approved": false,
+  "risk_approved": false
+}

@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **0.9.2 — Operational Proof**
+Current release: **0.9.3 — Owner Handoff**
 
 ## What version 0 shows
 
@@ -96,7 +96,8 @@ pytest
 | 0.8.0 | Pilot RBAC, refusal policy and expanded access audit | Complete |
 | 0.9.0 | Replay, security and UAT readiness tooling | Complete |
 | 0.9.1 | Reproducible upstream negative-auth security probe | Complete |
-| 0.9.2 | Backup/restore verification and 1.0 evidence matrix | Current |
+| 0.9.2 | Backup/restore verification and 1.0 evidence matrix | Complete |
+| 0.9.3 | Validated owner incident, security, identity and UAT inputs | Current |
 | 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |
 
 ## Project documents
@@ -109,3 +110,4 @@ pytest
 - [Security decision: read-only first](docs/decisions/0001-read-only-first.md)
 - [Changelog](CHANGELOG.md)
 - [1.0 readiness evidence](docs/releases/1.0-readiness.md)
+- [1.0 owner evidence inputs](integration-input/release-evidence/README.md)

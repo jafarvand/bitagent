@@ -1,0 +1,8 @@
+{
+  "approved_by": "security-owner-name",
+  "approved_at": "2026-07-30T00:00:00Z",
+  "non_allowlisted_ip_denied": false,
+  "wrong_scope_denied": false,
+  "rotation_tested": false,
+  "revocation_tested": false
+}

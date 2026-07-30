@@ -7,6 +7,7 @@ __pycache__/
 htmlcov/
 .bitagent-server*.log
 .data/
+integration-input/release-evidence/*.local.json
 dist/
 build/
 .DS_Store

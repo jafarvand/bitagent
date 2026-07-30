@@ -26,6 +26,7 @@ from app.incidents import detect_withdrawal_slowdown
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 from app.policy import evaluate_policy
+from app.release_inputs import validate_release_inputs
 from app.readiness import (
     historical_replay,
     load_upstream_security_report,
@@ -33,7 +34,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "0.9.2"
+VERSION = "0.9.3"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -77,7 +78,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Operational Proof",
+        "release": "Owner Handoff",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -318,6 +319,11 @@ async def readiness_report(
     upstream_security = load_upstream_security_report(
         settings.upstream_security_report_path
     )
+    release_inputs = validate_release_inputs(
+        settings.release_evidence_directory,
+        warning_threshold=settings.withdrawal_pending_warning_threshold,
+        critical_threshold=settings.withdrawal_pending_critical_threshold,
+    )
     return {
         "version": VERSION,
         "replay": replay,
@@ -327,8 +333,10 @@ async def readiness_report(
             security,
             live_mode=settings.bitagent_mode == "live",
             upstream_security=upstream_security,
+            release_inputs=release_inputs,
         ),
         "upstream_security": upstream_security,
+        "release_inputs": release_inputs,
     }
 
 

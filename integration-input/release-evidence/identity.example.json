@@ -1,0 +1,7 @@
+{
+  "approved_by": "identity-security-owner-name",
+  "approved_at": "2026-07-30T00:00:00Z",
+  "sso_jwt_enabled": false,
+  "mfa_required": false,
+  "access_review_complete": false
+}

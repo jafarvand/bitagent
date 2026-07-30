@@ -2,6 +2,16 @@
 
 All notable bitAgent changes are recorded here.
 
+## [0.9.3] - 2026-07-30
+
+### Added
+
+- Validated local input package for owner historical incidents, external
+  security evidence, production identity evidence, and UAT approval.
+- Owner incidents replay through the production deterministic rule.
+- SHA-256 evidence receipts without exposing submitted evidence content.
+- `python -m scripts.validate_release_inputs` handoff command.
+
 ## [0.9.2] - 2026-07-30
 
 ### Added
