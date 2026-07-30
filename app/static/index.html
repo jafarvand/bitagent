@@ -4,22 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>bitAgent · Secure Exchange Operations</title>
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=1.0.0">
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="/"><span class="brand-mark">b</span><span>bitAgent</span></a>
     <div class="top-actions">
       <span id="mode-pill" class="pill neutral">connecting</span>
-      <span class="release-chip">OWNER HANDOFF</span>
-      <span class="version">v<span id="version">0.9.3</span></span>
+      <button id="refresh-live" class="refresh-button" type="button">Refresh live data</button>
+      <span class="release-chip">READ-ONLY PILOT</span>
+      <span class="version">v<span id="version">1.0.0</span></span>
     </div>
   </header>
 
   <main>
     <section class="hero">
       <div>
-        <p class="eyebrow">VERSION 0.9.3 · OWNER HANDOFF</p>
+        <p class="eyebrow">VERSION 1.0.0 · READ-ONLY PILOT</p>
         <h1>Prove every pass.<br><span>Expose every gap.</span></h1>
         <p class="intro">Replay evidence, local security checks, and explicit UAT gates show exactly what passes—and what still blocks the 1.0 pilot.</p>
       </div>
@@ -95,8 +96,8 @@
       <label>Period
         <select id="days"><option value="1">24 hours</option><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select>
       </label>
-      <button id="refresh">Refresh view</button>
-      <span id="updated">Not loaded</span>
+      <button id="refresh" type="button">Refresh view</button>
+      <span id="updated" role="status" aria-live="polite">Not loaded</span>
     </section>
 
     <section class="metrics" id="metrics">
@@ -148,14 +149,14 @@
 
     <section class="panel coverage">
       <div class="panel-head">
-        <div><p class="eyebrow">0.9.3 CAPABILITY MAP</p><h2>Measured readiness, without false go-live claims</h2></div>
+        <div><p class="eyebrow">1.0.0 CAPABILITY MAP</p><h2>Measured readiness, without false go-live claims</h2></div>
         <div id="coverage-counts" class="coverage-counts"></div>
       </div>
       <div id="features" class="feature-list"></div>
     </section>
   </main>
 
-  <footer>bitAgent 0.9.3 · Owner Handoff · Read-only exchange connector · No action executed</footer>
-  <script src="/static/app.js"></script>
+  <footer>bitAgent 1.0.0 · Read-only Pilot · Read-only exchange connector · No action executed</footer>
+  <script src="/static/app.js?v=1.0.0"></script>
 </body>
 </html>

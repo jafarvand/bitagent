@@ -1,0 +1,15 @@
+services:
+  bitagent:
+    environment:
+      VIRTUAL_HOST: bitagent.zekabot.com
+      VIRTUAL_PORT: "8999"
+      LETSENCRYPT_HOST: bitagent.zekabot.com
+    networks:
+      - default
+      - nginx-proxy
+    volumes:
+      - /var/Zekabot/nginx-proxy/usr/share/nginx/html/.well-known/acme-challenge:/acme-challenge:ro
+
+networks:
+  nginx-proxy:
+    external: true

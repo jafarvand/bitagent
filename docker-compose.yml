@@ -2,7 +2,7 @@ services:
   bitagent:
     build: .
     ports:
-      - "8000:8000"
+      - "8999:8999"
     env_file:
       - path: .env
         required: false

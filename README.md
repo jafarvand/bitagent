@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **0.9.3 — Owner Handoff**
+Current release: **1.0.0 — Read-only Pilot**
 
 ## What version 0 shows
 
@@ -26,7 +26,14 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open <http://localhost:8000>.
+Open <http://localhost:8999>.
+
+For the production host, where the external `nginx-proxy` network and ACME
+challenge directory already exist, apply the production override explicitly:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.production.yml up --build -d
+```
 
 Without credentials the app starts in `mock` mode. For live read-only data, edit
 `.env`:
@@ -67,6 +74,7 @@ uvicorn app.main:app --reload
 - `GET /api/v0/audit/access/recent`
 - `GET /api/v0/evaluations/replay`
 - `GET /api/v0/readiness`
+- `GET /api/v0/releases/candidate` (1.0 gate decision and evidence receipt)
 - `GET /api/v0/users/{user_id}/{resource}` where resource is one of
   `summary`, `balances`, `trades`, `deposits`, `withdrawals`, `pnl`
 - `GET /health`
@@ -97,8 +105,9 @@ pytest
 | 0.9.0 | Replay, security and UAT readiness tooling | Complete |
 | 0.9.1 | Reproducible upstream negative-auth security probe | Complete |
 | 0.9.2 | Backup/restore verification and 1.0 evidence matrix | Complete |
-| 0.9.3 | Validated owner incident, security, identity and UAT inputs | Current |
-| 1.0.0 | Approved read-only pilot after replay, security and UAT gates | Planned |
+| 0.9.3 | Validated owner incident, security, identity and UAT inputs | Complete |
+| 0.10.0 | Fail-closed 1.0 candidate decision and evidence receipt | Complete |
+| 1.0.0 | Read-only pilot release; evidence gates remain fail-closed | Current |
 
 ## Project documents
 

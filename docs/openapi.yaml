@@ -6,13 +6,98 @@ info:
     pilot (withdrawal/deposit slowdown investigation). All routes are GET-only
     and live in Rest\Controller\BotController on exchange-backend. No write,
     trade, transfer, or withdrawal endpoints are exposed here by design.
-  version: "0.2.0-pilot"
+  version: "0.3.0-pilot"
 servers:
   - url: https://devapi.zekabot.com
     description: exchange-backend (VIRTUAL_HOST devapi.zekabot.com / apistage2.zekabot.com)
 security:
   - botServiceAuth: []
 paths:
+  /api/bot/health:
+    get:
+      summary: Backend and dependency health
+      description: >
+        Returns HTTP 200 whenever the caller is authenticated, even if a
+        dependency is down — the overall state lives in `data.status`, not the
+        status code. This lets the caller distinguish "API unreachable"
+        (transport error, no response at all) from "API up but a dependency is
+        degraded", and avoids colliding with the 503 this API already uses to
+        mean "bot auth not configured". Dependency probes are bounded
+        (2s connect / 5s read) so a hung dependency is reported as a failure
+        rather than hanging the health check itself.
+      responses:
+        '200':
+          description: OK (check data.status for actual health)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /api/bot/transactions/summary:
+    get:
+      summary: Exchange-wide open deposit/withdrawal counts by status, right now
+      description: >
+        Point-in-time (no date range, unlike /operations) — for detecting a
+        slowdown you need "how much is stuck right now", not a historical
+        count. **Known data-quality caveat**: `oldest_open_*` currently
+        reflects stale rows from 2022 still flagged open in the database
+        (observed live 2026-07-30: ~4+ years old), not a real incident. Do not
+        alert directly on this value without a sanity ceiling (e.g. ignore
+        ages beyond a threshold, or alert on the *rate of change* in
+        `open_count` instead) until those rows are cleaned up or the query is
+        changed to exclude them — deciding which is a product/ops call, not
+        made here.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsSummaryResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /api/bot/withdrawals/pending:
+    get:
+      summary: All currently in-flight withdrawals, exchange-wide, oldest first
+      description: >
+        Cross-user (unlike /user/{userId}/withdrawals) — finds stuck
+        withdrawals without already knowing which user is affected.
+        Keyset/cursor-paginated by id, not the offset-style `limit` used
+        elsewhere: pass the previous page's `next_cursor` as `cursor` to
+        continue; omit `cursor` (or pass 0) for the first page. Same
+        4-year-old-row caveat as /transactions/summary applies to whatever
+        appears first in this list.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - name: cursor
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: Last withdrawal_id seen (from the previous page's next_cursor). Omit for the first page.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingWithdrawalsResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
   /api/bot/operations:
     get:
       summary: Aggregated deposit/withdrawal/order counts for a date range
@@ -340,6 +425,125 @@ components:
         currency: { type: string, example: IRT }
         data_freshness_seconds: { type: integer, minimum: 0 }
 
+    HealthResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [status, service, server_time, server_time_unix, components]
+          properties:
+            status:
+              type: string
+              enum: [ok, degraded]
+              description: "`degraded` if any component reports fail. Always check this — the HTTP status is 200 either way."
+            service: { type: string, example: exchange-backend }
+            server_time:
+              type: string
+              format: date-time
+              description: "Server clock. Compare against your own to detect drift before it starts causing signature rejections (requests must be within 60s)."
+            server_time_unix: { type: integer }
+            components:
+              type: object
+              required: [database, matching_engine]
+              properties:
+                database: { $ref: '#/components/schemas/HealthComponent' }
+                matching_engine: { $ref: '#/components/schemas/HealthComponent' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    HealthComponent:
+      type: object
+      required: [status, latency_ms]
+      properties:
+        status: { type: string, enum: [ok, fail] }
+        latency_ms: { type: number, description: "Round-trip probe time in milliseconds." }
+        error_code:
+          type: string
+          enum: [query_failed, unreachable, unexpected_response]
+          description: "Present only when status is fail. Deliberately a coarse code — underlying exception messages are not exposed, as they can carry DSNs/credentials."
+
+    TransactionsSummaryResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [as_of, deposits, withdrawals]
+          properties:
+            as_of: { type: string, format: date-time }
+            deposits:
+              type: object
+              required: [by_status, open_count, oldest_open_created_at, oldest_open_age_seconds]
+              properties:
+                by_status:
+                  type: object
+                  required: [pending, processing, confirmed, rejected, unknown]
+                  properties:
+                    pending: { type: integer }
+                    processing: { type: integer }
+                    confirmed: { type: integer }
+                    rejected: { type: integer }
+                    unknown: { type: integer }
+                open_count: { type: integer, description: "pending + processing" }
+                oldest_open_created_at: { type: string, nullable: true, description: "Null only if there are zero open deposits." }
+                oldest_open_age_seconds: { type: integer, nullable: true, description: "See endpoint description for the stale-row caveat — do not alert on this raw." }
+            withdrawals:
+              type: object
+              required: [by_status, open_count, oldest_open_created_at, oldest_open_age_seconds]
+              properties:
+                by_status:
+                  type: object
+                  required: [pending, verified, processing, completed, cancelled]
+                  properties:
+                    pending: { type: integer }
+                    verified: { type: integer }
+                    processing: { type: integer }
+                    completed: { type: integer }
+                    cancelled: { type: integer }
+                open_count: { type: integer, description: "pending + verified + processing" }
+                oldest_open_created_at: { type: string, nullable: true }
+                oldest_open_age_seconds: { type: integer, nullable: true, description: "See endpoint description for the stale-row caveat — do not alert on this raw." }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    PendingWithdrawalsResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [as_of, count_returned, next_cursor, items]
+          properties:
+            as_of: { type: string, format: date-time }
+            count_returned: { type: integer }
+            next_cursor: { type: string, nullable: true, description: "Pass as ?cursor= to get the next page. Null means this was the last page." }
+            items:
+              type: array
+              items:
+                type: object
+                required: [withdrawal_id, user_id, asset, network, status, process_status, requested_amount, sent_amount, fee, destination, transaction_hash, created_at, updated_at, age_seconds]
+                properties:
+                  withdrawal_id: { type: integer }
+                  user_id: { type: integer }
+                  asset: { type: string }
+                  network:
+                    type: string
+                    nullable: true
+                    description: "From asset_withdraw_networks.network_ticker. Can be an empty string for some records (observed on fiat/IRT rows) — a real DB value, not a join failure."
+                  status: { type: string, enum: [pending, verified, processing], description: "Only these three appear — the query already excludes completed/cancelled." }
+                  process_status:
+                    type: integer
+                    nullable: true
+                    description: "Raw integer from the withdraw-processor callback. Meaning not fully documented in source (0/1/2 observed); exposed as-is rather than guessed at. process_result (free-text) is deliberately NOT exposed — unconfirmed whether it can carry sensitive data."
+                  requested_amount: { type: string }
+                  sent_amount: { type: string }
+                  fee: { type: string }
+                  destination: { type: string, nullable: true, description: masked }
+                  transaction_hash: { type: string, nullable: true, description: masked }
+                  created_at: { type: string }
+                  updated_at: { type: string, nullable: true, description: "Null observed live when modified_at was never set on the row." }
+                  age_seconds: { type: integer, description: "See endpoint description for the stale-row caveat." }
+        meta: { $ref: '#/components/schemas/Meta' }
+
     OperationsResponse:
       type: object
       required: [data, meta]
@@ -520,7 +724,7 @@ components:
                   destination: { type: string, nullable: true, description: masked }
                   transaction_hash: { type: string, nullable: true, description: masked }
                   created_at: { type: string }
-                  updated_at: { type: string }
+                  updated_at: { type: string, nullable: true, description: "Null observed live (via /withdrawals/pending, same underlying column) when modified_at was never set on the row." }
         meta: { $ref: '#/components/schemas/Meta' }
 
     PnlResponse:

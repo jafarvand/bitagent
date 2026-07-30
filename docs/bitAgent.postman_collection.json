@@ -96,6 +96,80 @@
       "name": "Happy path",
       "item": [
         {
+          "name": "Health (backend + dependencies)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('status field is ok (not degraded)', () => {",
+                "    pm.expect(pm.response.json().data.status).to.eql('ok');",
+                "});",
+                "pm.test('all components report ok', () => {",
+                "    const c = pm.response.json().data.components;",
+                "    Object.keys(c).forEach(k => pm.expect(c[k].status, k).to.eql('ok'));",
+                "});",
+                "pm.test('client clock is within 60s of server (signing requirement)', () => {",
+                "    const skew = Math.abs(Math.floor(Date.now()/1000) - pm.response.json().data.server_time_unix);",
+                "    pm.expect(skew, 'clock skew in seconds').to.be.below(60);",
+                "});"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/health", "host": ["{{base_url}}"], "path": ["api","bot","health"] }
+          }
+        },
+        {
+          "name": "Transactions summary (exchange-wide, point-in-time)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "// See README 'Data-quality trap' before wiring alerts off oldest_open_age_seconds —",
+                "// live data has shown 4+ year old stale rows still flagged open.",
+                "pm.test('has deposits and withdrawals breakdowns', () => {",
+                "    const d = pm.response.json().data;",
+                "    pm.expect(d).to.have.property('deposits');",
+                "    pm.expect(d).to.have.property('withdrawals');",
+                "});"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/transactions/summary", "host": ["{{base_url}}"], "path": ["api","bot","transactions","summary"] }
+          }
+        },
+        {
+          "name": "Withdrawals pending (exchange-wide, cursor-paginated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('items only contain in-flight statuses', () => {",
+                "    const items = pm.response.json().data.items;",
+                "    items.forEach(it => pm.expect(['pending','verified','processing']).to.include(it.status));",
+                "});",
+                "if (pm.response.json().data.next_cursor) {",
+                "    pm.collectionVariables.set('_withdrawals_next_cursor', pm.response.json().data.next_cursor);",
+                "}"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/withdrawals/pending?limit={{limit}}", "host": ["{{base_url}}"], "path": ["api","bot","withdrawals","pending"], "query": [{"key":"limit","value":"{{limit}}"}] }
+          }
+        },
+        {
+          "name": "Withdrawals pending — next page (uses cursor from previous request)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/bot/withdrawals/pending?limit={{limit}}&cursor={{_withdrawals_next_cursor}}", "host": ["{{base_url}}"], "path": ["api","bot","withdrawals","pending"], "query": [{"key":"limit","value":"{{limit}}"},{"key":"cursor","value":"{{_withdrawals_next_cursor}}"}] }
+          }
+        },
+        {
           "name": "Operations (aggregate deposits/withdrawals/orders)",
           "request": {
             "method": "GET",

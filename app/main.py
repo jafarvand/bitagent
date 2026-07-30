@@ -27,6 +27,7 @@ from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 from app.policy import evaluate_policy
 from app.release_inputs import validate_release_inputs
+from app.release_candidate import build_release_candidate_manifest
 from app.readiness import (
     historical_replay,
     load_upstream_security_report,
@@ -34,13 +35,18 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "0.9.3"
+VERSION = "1.0.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
     description="Read-only replay, security and UAT readiness tooling.",
+)
+app.mount(
+    "/.well-known/acme-challenge",
+    StaticFiles(directory="/acme-challenge", check_dir=False),
+    name="acme-challenge",
 )
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -78,7 +84,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Owner Handoff",
+        "release": "Read-only Pilot",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -338,6 +344,16 @@ async def readiness_report(
         "upstream_security": upstream_security,
         "release_inputs": release_inputs,
     }
+
+
+@app.get("/api/v0/releases/candidate")
+async def release_candidate(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    report = await readiness_report(role)
+    return build_release_candidate_manifest(
+        report["uat"], current_version=VERSION
+    )
 
 
 UserResource = Literal[

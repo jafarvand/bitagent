@@ -7,7 +7,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open `http://localhost:8000` and confirm the header shows `MOCK MODE`.
+Open `http://localhost:8999` and confirm the header shows `MOCK MODE`.
 
 ## Start with a live read-only API
 
@@ -23,9 +23,9 @@ Do not paste the token into chat, source code, Git, screenshots or issue bodies.
 ## Smoke checks
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/api/v0/status
-curl "http://localhost:8000/api/v0/dashboard?market=BTC_USDT&days=30"
+curl http://localhost:8999/health
+curl http://localhost:8999/api/v0/status
+curl "http://localhost:8999/api/v0/dashboard?market=BTC_USDT&days=30"
 ```
 
 Confirm:

@@ -2,6 +2,24 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.0.0] - 2026-07-30
+
+### Changed
+
+- Promoted the application to the read-only 1.0 pilot release.
+- Retained fail-closed readiness reporting and prohibited-action boundaries.
+- Updated the dashboard and public version metadata for the 1.0 release.
+- Moved the application listener and published Docker port to 8999.
+- Added top-level and dashboard live-refresh controls with visible request status.
+
+## [0.10.0] - 2026-07-30
+
+### Added
+
+- Fail-closed 1.0 release-candidate decision manifest with explicit blockers.
+- Stable SHA-256 receipt over candidate version and readiness-gate evidence.
+- `GET /api/v0/releases/candidate` for controlled-pilot approval inspection.
+
 ## [0.9.3] - 2026-07-30
 
 ### Added

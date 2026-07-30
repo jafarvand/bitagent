@@ -37,7 +37,7 @@ Custom HMAC-SHA256 service-to-service signing — **not** JWT, not a plain API k
    - `X-Request-ID: <uuid>` — v1-5 UUID, **single-use**: replaying an already-seen ID now gets rejected with 409 (`BotNonceStore`, file-based claim under `temp/bot_nonces/`, retained 5 minutes — longer than the 60s clock-skew window so a nonce can't "expire back into" validity).
    - `X-Request-Signature: <hex hmac>`.
 4. Secrets live in `.env.bitagent` at the repo root as `EXCHANGE_BOT_SERVICE_KEYS=key_id:secret,key_id2:secret2` (comma-separated `key_id:secret` pairs — add a new pair to rotate without downtime, remove one to revoke immediately), loaded into the `exchange-backend` container via `env_file` in `docker-compose.yml`. **Not committed to the config file itself, not printed in this doc.** A container recreate (`docker compose up -d exchange-backend`) is required after editing `.env.bitagent` for the new keys to take effect.
-5. Optional IP allowlist via `EXCHANGE_BOT_ALLOWED_IPS` (comma-separated) — currently **unset** (open) per the 2026-07-29 pilot decision. **Configure this before any real production access**, not just the pilot — it's the one item on this list that's a pure operational input (the bitAgent's actual egress IP) rather than something buildable in advance.
+5. Optional IP allowlist via `EXCHANGE_BOT_ALLOWED_IPS` (comma-separated) — **configured as of 2026-07-30** with the bitAgent host's egress IP(s) plus `127.0.0.1` for local testing. Update this file directly (`.env.bitagent`) and recreate `exchange-backend` when the bitAgent's egress IP changes.
 6. Per-key rate limiting: `EXCHANGE_BOT_RATE_LIMIT_PER_MINUTE` (default 120), file-counter based under `temp/bot_ratelimit/`. Exceeding it returns 429.
 7. Every auth outcome (success, bad signature, IP denied, rate limited, replay, config missing) is logged via `error_log` — visible in `docker compose logs exchange-backend`, tagged `[bot-auth]` with `event`, `key_id`, `request_id`, `ip`, `path`.
 8. All failures return a structured JSON error (`{"error":{"code","message","request_id"}}`) with the appropriate status: 503 config missing, 403 IP denied, 429 rate limited, 401 bad/missing signature, 409 replay.
@@ -50,6 +50,9 @@ There is no write, trade, transfer, or withdrawal action reachable through this 
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/bot/health` | Backend + dependency health (database, matching engine) with per-component latency |
+| GET | `/api/bot/transactions/summary` | Exchange-wide open deposit/withdrawal counts by status, right now (not date-ranged) |
+| GET | `/api/bot/withdrawals/pending` | All in-flight withdrawals, exchange-wide, oldest first, cursor-paginated |
 | GET | `/api/bot/operations` | Aggregated deposit/withdrawal/order counts + fee revenue for a date range |
 | GET | `/api/bot/market/{marketIdentifier}/summary` | Single market ticker/status (e.g. `BTC_USDT`) |
 | GET | `/api/bot/user/{userId}/summary` | Account status, KYC level, order counts |
@@ -61,9 +64,75 @@ There is no write, trade, transfer, or withdrawal action reachable through this 
 
 **Known gap:** none of these give aggregated **treasury** (exchange hot-wallet balances) or **liabilities** (aggregate customer balance per asset across all users) data — see "Not yet built" below.
 
+**⚠️ Data-quality trap — read before wiring up alerts:** `transactions/summary` and `withdrawals/pending` both surface an `oldest_open_*` age. Live on 2026-07-30, the oldest "open" deposit was from **2022-02-01** and the oldest "open" withdrawal from **2022-06-26** — both over 4 years old. These are almost certainly stale/abandoned rows never properly closed out in the database, not an active incident. **Do not alert directly on the raw age value** — it will fire immediately and permanently. Either cap what counts as "genuinely pending" at some reasonable ceiling (a business decision, not made here), or alert on the *rate of change* in `open_count` / queue depth instead of absolute age, until someone decides whether those old rows should be cleaned up or excluded at the query level.
+
 ## Sanitized sample responses
 
 Captured live against `exchange-backend` on 2026-07-29, IDs/amounts are real production values as of that moment (this is a live exchange, not synthetic data — treat these numbers as a shape reference, not a fixture to hardcode against).
+
+**`GET /api/bot/health`** (captured live 2026-07-30)
+```json
+{
+  "data": {
+    "status": "ok",
+    "service": "exchange-backend",
+    "server_time": "2026-07-30T19:04:08+00:00",
+    "server_time_unix": 1785438248,
+    "components": {
+      "database": { "status": "ok", "latency_ms": 0.79 },
+      "matching_engine": { "status": "ok", "latency_ms": 33.67 }
+    }
+  },
+  "meta": { "request_id": "1dcbc582-...", "generated_at": "2026-07-30T19:04:08+00:00", "currency": "IRT", "data_freshness_seconds": 0 }
+}
+```
+
+**`GET /api/bot/transactions/summary`** (captured live 2026-07-30 — see the data-quality warning above about `oldest_open_age_seconds`)
+```json
+{
+  "data": {
+    "as_of": "2026-07-30T19:09:41+00:00",
+    "deposits": {
+      "by_status": { "pending": 34582, "processing": 1117, "confirmed": 170350, "rejected": 2, "unknown": 0 },
+      "open_count": 35699,
+      "oldest_open_created_at": "2022-02-01 00:01:50",
+      "oldest_open_age_seconds": 141777471
+    },
+    "withdrawals": {
+      "by_status": { "pending": 6129, "verified": 171, "processing": 16888, "completed": 111710, "cancelled": 785 },
+      "open_count": 23188,
+      "oldest_open_created_at": "2022-06-26 05:41:49",
+      "oldest_open_age_seconds": 129232672
+    }
+  },
+  "meta": { "request_id": "893b55ac-...", "generated_at": "2026-07-30T19:09:41+00:00", "currency": "IRT", "data_freshness_seconds": 30 }
+}
+```
+Note the `open_count` values themselves (35,699 open deposits; 23,188 open withdrawals) are large enough that they likely also include a substantial backlog of old/abandoned rows, not all genuinely "pending right now" — the same caveat applies to the counts, not just the age fields.
+
+**`GET /api/bot/withdrawals/pending?limit=1`** (captured live 2026-07-30)
+```json
+{
+  "data": {
+    "as_of": "2026-07-30T19:10:00+00:00",
+    "count_returned": 1,
+    "next_cursor": "49058",
+    "items": [
+      {
+        "withdrawal_id": 49058, "user_id": 1738, "asset": "IRT", "network": "",
+        "status": "processing", "process_status": 0,
+        "requested_amount": "100000.00000000", "sent_amount": "96000.00000000", "fee": "4000.00000000",
+        "destination": "IR31******************9001", "transaction_hash": null,
+        "created_at": "2022-06-26 05:41:49", "updated_at": "2022-06-26 05:41:56",
+        "age_seconds": 129232672
+      }
+    ]
+  },
+  "meta": { "request_id": "fb66ab3a-...", "generated_at": "2026-07-30T19:10:00+00:00", "currency": "IRT", "data_freshness_seconds": 30 }
+}
+```
+`network: ""` is a genuine DB value (empty `asset_withdraw_networks.network_ticker`), confirmed live, not a join bug — seen on IRT (fiat) rows here. Pass `next_cursor` back as `?cursor=49058` to get the next page; this is real keyset pagination (by `id`, oldest-first), not the offset-based `limit` the per-user endpoints use.
+Returns **HTTP 200 even when degraded** — always read `data.status` (`ok` | `degraded`), not the status code. A failing component adds `error_code` (`query_failed` | `unreachable` | `unexpected_response`); underlying exception text is deliberately not exposed since it can carry DSNs/credentials. `server_time`/`server_time_unix` let you detect clock drift before it starts causing signature rejections.
 
 **`GET /api/bot/operations?date_from=2026-06-29&date_to=2026-07-29`**
 ```json
@@ -166,10 +235,10 @@ Status derivation order (first match wins): `cancelled` → `completed` → `pro
 
 | Endpoint | Data source it would need |
 |---|---|
-| `GET /api/bot/health` | exchange-backend itself + JSON-RPC reachability to exchange-core — buildable now |
-| `GET /api/bot/transactions/summary` | Extension of existing `Deposit`/`Withdraw` models — buildable now, needs a decision on what "oldest pending age" bucketing looks like |
-| `GET /api/bot/withdrawals/pending` | Same models, needs pagination added first |
-| `GET /api/bot/deposits/pending` | Same models, needs pagination added first |
+| ~~`GET /api/bot/health`~~ | **Built 2026-07-30** — see endpoint table above |
+| ~~`GET /api/bot/transactions/summary`~~ | **Built 2026-07-30** — see endpoint table above and the data-quality warning on `oldest_open_age_seconds` |
+| ~~`GET /api/bot/withdrawals/pending`~~ | **Built 2026-07-30**, cursor-paginated by id — see endpoint table above |
+| `GET /api/bot/deposits/pending` | Not built yet — same shape as withdrawals/pending above, against the `deposits` table instead; should be a quick follow-up using the same pattern |
 | `GET /api/bot/networks/status` | Nothing today exposes per-chain wallet-mon health — needs new endpoints on each `*-wallet-mon` service |
 | `GET /api/bot/queues/status` | Kafka consumer-lag isn't exposed anywhere (`core-webhook-handler` consumes but doesn't report lag) |
 | `GET /api/bot/workers/status` | No worker/heartbeat concept currently exists in `exchange-backend` or the wallet services as inspected |

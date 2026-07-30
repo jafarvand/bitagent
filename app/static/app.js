@@ -2,12 +2,21 @@ const $ = (id) => document.getElementById(id);
 const number = (value, maximumFractionDigits = 2) =>
   Number(value || 0).toLocaleString(undefined, {maximumFractionDigits});
 let currentBriefId = null;
+let refreshCount = 0;
 
 async function json(url) {
-  const response = await fetch(url);
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    throw new Error(`${url}: ${error.message}`);
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || `Request failed (${response.status})`);
+    const detail = typeof body.detail === "string"
+      ? body.detail
+      : body.detail?.reason || body.detail?.code;
+    throw new Error(`${url}: ${detail || `request failed (${response.status})`}`);
   }
   return response.json();
 }
@@ -148,7 +157,12 @@ async function submitFeedback(rating) {
 }
 
 async function load() {
-  $("refresh").disabled = true;
+  const refreshButtons = [$("refresh"), $("refresh-live")];
+  refreshButtons.forEach(button => button.disabled = true);
+  $("refresh-live").textContent = "Refreshing…";
+  $("updated").textContent = "Refreshing live data…";
+  $("updated").className = "";
+  $("system-state").className = "";
   try {
     const market = $("market").value.trim().toUpperCase();
     const days = $("days").value;
@@ -170,17 +184,21 @@ async function load() {
     renderInvestigation(investigation);
     renderExecutiveBrief(brief);
     renderReadiness(readiness);
+    refreshCount += 1;
+    $("updated").textContent = `Live refresh #${refreshCount} completed at ${new Date().toLocaleTimeString()}`;
   } catch (error) {
-    $("system-state").textContent = "Connection error";
+    $("system-state").textContent = "Data unavailable";
     $("system-state").className = "error";
     $("updated").textContent = error.message;
     $("updated").className = "error";
   } finally {
-    $("refresh").disabled = false;
+    refreshButtons.forEach(button => button.disabled = false);
+    $("refresh-live").textContent = "Refresh live data";
   }
 }
 
 $("refresh").addEventListener("click", load);
+$("refresh-live").addEventListener("click", load);
 $("feedback-useful").addEventListener("click", () => submitFeedback("useful").catch(error => $("feedback-status").textContent = error.message));
 $("feedback-correction").addEventListener("click", () => submitFeedback("needs_correction").catch(error => $("feedback-status").textContent = error.message));
 load();

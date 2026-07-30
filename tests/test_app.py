@@ -12,6 +12,7 @@ from app.evidence import backup_and_verify, record_dashboard
 from app.main import app
 from app.market_risk import analyze_market_range
 from app.release_inputs import validate_release_inputs
+from app.release_candidate import build_release_candidate_manifest
 
 
 client = TestClient(app)
@@ -32,7 +33,16 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "0.9.3"
+    assert response.json()["version"] == "1.0.0"
+
+
+def test_dashboard_exposes_both_live_refresh_controls():
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'id="refresh-live"' in response.text
+    assert 'id="refresh"' in response.text
+    assert 'aria-live="polite"' in response.text
 
 
 def test_dashboard_mock_contract():
@@ -161,7 +171,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "0.9.3",
+        "version": "1.0.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -230,7 +240,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "0.9.3"
+    assert report["version"] == "1.0.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -317,6 +327,37 @@ def test_release_owner_inputs_are_validated_and_replayed(tmp_path):
     assert result["contains_credentials"] is False
     assert len(result["owner_incidents"]["cases"]) == 5
     assert all(item["sha256"] for key, item in result.items() if isinstance(item, dict) and item.get("status") == "valid")
+
+
+def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
+    response = client.get("/api/v0/releases/candidate")
+    assert response.status_code == 200
+    manifest = response.json()
+
+    assert manifest["candidate_version"] == "1.0.0"
+    assert manifest["current_version"] == "1.0.0"
+    assert manifest["decision"] == "blocked"
+    assert manifest["approved"] is False
+    assert manifest["blockers"]
+    assert len(manifest["evidence_sha256"]) == 64
+    assert manifest["action_executed"] is False
+
+
+def test_1_0_candidate_approval_requires_every_gate_to_pass():
+    readiness = {
+        "gates": [
+            {"id": "replay", "status": "pass", "evidence": "6/6"},
+            {"id": "approval", "status": "pass", "evidence": "validated"},
+        ]
+    }
+
+    first = build_release_candidate_manifest(readiness, current_version="0.9.3")
+    second = build_release_candidate_manifest(readiness, current_version="0.9.3")
+
+    assert first["decision"] == "approved_for_controlled_pilot"
+    assert first["approved"] is True
+    assert first["blockers"] == []
+    assert first["evidence_sha256"] == second["evidence_sha256"]
 
 
 def test_feature_gaps_are_explicit():
