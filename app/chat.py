@@ -273,7 +273,28 @@ def build_chat_context(
     }
 
 
-def build_prompt(question: str, context: dict) -> str:
+def _context_json(context: dict, max_chars: int) -> str:
+    serialized = json.dumps(context, sort_keys=True, default=str)
+    if len(serialized) <= max_chars:
+        return serialized
+    compact = {
+        "generated_at": context.get("generated_at"),
+        "evidence_record": context.get("evidence_record"),
+        "operations": context.get("operations"),
+        "market": context.get("market"),
+        "incident": context.get("incident"),
+        "market_risk": context.get("market_risk"),
+        "audit_chain_valid": context.get("audit_chain_valid"),
+        "feature_gaps": context.get("feature_gaps"),
+        "context_compacted": True,
+    }
+    compact_json = json.dumps(compact, sort_keys=True, default=str)
+    if len(compact_json) > max_chars:
+        raise ValueError("evidence context exceeds the configured safe limit")
+    return compact_json
+
+
+def build_prompt(question: str, context: dict, max_context_chars: int = 30000) -> str:
     safe_question = redact(question)
     return (
         "You are bitAgent, a strictly read-only exchange operations assistant.\n"
@@ -284,7 +305,7 @@ def build_prompt(question: str, context: dict) -> str:
         "Answer with: conclusion, evidence, confidence, limitations, and suggested "
         "human investigation. End with: No action executed by bitAgent.\n\n"
         f"UNTRUSTED USER QUESTION:\n{safe_question}\n\n"
-        f"EVIDENCE JSON:\n{json.dumps(context, sort_keys=True, default=str)}"
+        f"EVIDENCE JSON:\n{_context_json(context, max_context_chars)}"
     )
 
 

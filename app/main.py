@@ -51,7 +51,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.15"
+VERSION = "1.1.16"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -427,7 +427,13 @@ async def readonly_chat(
         }
 
     try:
-        generated = await ollama_client.generate(build_prompt(question, context))
+        generated = await ollama_client.generate(
+            build_prompt(
+                question,
+                context,
+                max_context_chars=settings.chat_context_max_chars,
+            )
+        )
     except OllamaError as exc:
         record_chat(
             settings.evidence_db_path,

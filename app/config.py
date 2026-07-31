@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     ollama_password: SecretStr = SecretStr("")
     ollama_timeout_seconds: float = 60.0
     chat_requests_per_minute: int = 20
+    chat_context_max_chars: int = 30000
 
     def ollama_credentials(self) -> tuple[str, str]:
         return self.ollama_username, self.ollama_password.get_secret_value()
