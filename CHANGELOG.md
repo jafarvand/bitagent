@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.18] - 2026-07-31
+
+- Added citation completeness gates for source time, record ID, and evidence hash.
+
 ## [1.1.17] - 2026-07-31
 
 - Added fail-closed chat answer quality gates and per-check response metadata.

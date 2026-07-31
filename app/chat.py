@@ -334,11 +334,19 @@ def citations(context: dict) -> list[dict]:
 
 
 def answer_quality(answer: str, evidence_citations: list[dict]) -> dict:
+    citations_complete = bool(evidence_citations) and all(
+        citation.get("source")
+        and citation.get("generated_at")
+        and citation.get("evidence_record_id") is not None
+        and len(str(citation.get("evidence_hash", ""))) == 64
+        for citation in evidence_citations
+    )
     checks = {
         "non_empty": bool(answer.strip()),
         "bounded_length": len(answer) <= 12000,
         "non_execution_statement": "No action executed by bitAgent." in answer,
         "has_citations": bool(evidence_citations),
+        "citations_complete": citations_complete,
         "credentials_redacted": not any(
             pattern.search(answer) for pattern in SECRET_PATTERNS
         ),
