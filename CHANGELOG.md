@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.6] - 2026-07-31
+
+- Added bounded, UUID-addressed, role-filtered conversation history.
+
 ## [1.1.5] - 2026-07-31
 
 - Added client-supplied or generated UUID chat sessions persisted in chat audit records.

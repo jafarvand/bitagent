@@ -39,7 +39,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.1.5"
+    assert response.json()["version"] == "1.1.6"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -188,7 +188,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.1.5",
+        "version": "1.1.6",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -332,6 +332,35 @@ def test_readonly_chat_is_grounded_cited_redacted_and_audited(monkeypatch):
     assert audit["items"][0]["session_id"] == body["session_id"]
 
 
+def test_chat_session_history_is_bounded_and_role_filtered():
+    client.get("/api/v0/dashboard")
+    session_id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    for question in (
+        "How many withdrawals are pending?",
+        "What is the withdrawal incident severity?",
+    ):
+        response = client.post(
+            "/api/v0/chat",
+            headers={"X-BitAgent-Role": "operator"},
+            json={"session_id": session_id, "question": question},
+        )
+        assert response.status_code == 200
+
+    history = client.get(
+        f"/api/v0/chat/sessions/{session_id}?limit=1",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+    viewer = client.get(
+        f"/api/v0/chat/sessions/{session_id}",
+        headers={"X-BitAgent-Role": "viewer"},
+    )
+
+    assert history["count"] == 1
+    assert history["items"][0]["question_text"]
+    assert history["items"][0]["answer_text"]
+    assert viewer.status_code == 403
+
+
 def test_readonly_chat_denies_anonymous_even_in_observe_mode():
     client.get("/api/v0/dashboard")
     response = client.post(
@@ -461,7 +490,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.1.5"
+    assert report["version"] == "1.1.6"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -556,7 +585,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.1.5"
+    assert manifest["current_version"] == "1.1.6"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

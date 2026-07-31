@@ -23,6 +23,7 @@ from app.exchange import ExchangeAPIError, exchange_client
 from app.evidence import (
     evidence_trends,
     feedback_summary,
+    chat_session_messages,
     recent_chat_audit,
     recent_access_decisions,
     recent_evidence,
@@ -47,7 +48,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.5"
+VERSION = "1.1.6"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -470,6 +471,29 @@ async def chat_models(
         "configured": settings.ollama_model,
         "resolved": resolved,
         "models": models,
+    }
+
+
+@app.get("/api/v0/chat/sessions/{session_id}")
+async def chat_session_history(
+    session_id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("use_readonly_chat", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "chat_role_denied"})
+    items = chat_session_messages(
+        settings.evidence_db_path,
+        str(session_id),
+        role=decision["role"],
+        limit=limit,
+    )
+    return {
+        "version": VERSION,
+        "session_id": str(session_id),
+        "items": items,
+        "count": len(items),
     }
 
 
