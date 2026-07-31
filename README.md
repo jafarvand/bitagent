@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.9 — Trend Answers**
+Current release: **1.1.10 — Brief Answers**
 
 ## What version 0 shows
 
@@ -152,6 +152,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.7 | Auditor-only content-free session audit receipts | Current |
 | 1.1.8 | Stable operations, market, quality, safety, and open-ended categories | Current |
 | 1.1.9 | Deterministic pending-withdrawal trend answers | Current |
+| 1.1.10 | Deterministic executive brief and priority answers | Current |
 
 ## Project documents
 

@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.10] - 2026-07-31
+
+- Added deterministic executive brief and priority chat answers.
+
 ## [1.1.9] - 2026-07-31
 
 - Added deterministic pending-withdrawal trend and direction answers.

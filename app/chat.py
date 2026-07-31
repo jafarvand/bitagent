@@ -2,6 +2,7 @@ import json
 import re
 from datetime import UTC, datetime
 
+from app.briefs import daily_executive_brief
 from app.evidence import latest_evidence_payload, verify_chain
 from app.investigations import withdrawal_investigation
 
@@ -44,6 +45,21 @@ def deterministic_answer(question: str, context: dict) -> dict | None:
     incident = context["incident"]
     market = context["market"].get("data", {})
 
+    if "brief" in normalized or "priorit" in normalized:
+        brief = context["brief"]
+        priorities = ", ".join(
+            item["title"] for item in brief.get("priorities", [])
+        ) or "No priority items"
+        return {
+            "intent": "daily_executive_brief",
+            "answer": (
+                f"{brief.get('headline', 'No brief is available')} "
+                f"Priorities: {priorities}."
+            ),
+            "confidence": (
+                "high" if brief.get("status") == "ready" else "insufficient"
+            ),
+        }
     if (
         "trend" in normalized
         or "change" in normalized
@@ -139,6 +155,8 @@ def intent_category(intent: str) -> str:
         return "market"
     if intent == "root_cause_boundary":
         return "evidence_quality"
+    if intent == "daily_executive_brief":
+        return "management"
     return "general"
 
 
@@ -157,6 +175,11 @@ def build_chat_context(
         freshness_warning_seconds=freshness_warning_seconds,
     )
     payload = latest["payload"]
+    brief = daily_executive_brief(
+        path,
+        trend_limit=trend_limit,
+        freshness_warning_seconds=freshness_warning_seconds,
+    )
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "evidence_record": {
@@ -169,6 +192,7 @@ def build_chat_context(
         "incident": payload["incident"],
         "market_risk": payload["market_risk"],
         "investigation": report,
+        "brief": brief,
         "audit_chain_valid": verify_chain(path)["valid"],
     }
 
