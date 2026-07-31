@@ -46,7 +46,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.3"
+VERSION = "1.1.4"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -352,12 +352,14 @@ async def readonly_chat(
         )
         return {
             "version": VERSION,
+            "answer_type": "policy_refusal",
             "answer": answer,
             "citations": citations(context),
             "confidence": "policy_certain",
             "limitations": context["investigation"].get("limitations", []),
             "model": "policy-refusal",
             "audit": audit,
+            "evidence_record": context["evidence_record"],
             "action_executed": False,
         }
 
@@ -378,6 +380,7 @@ async def readonly_chat(
         )
         return {
             "version": VERSION,
+            "answer_type": "deterministic",
             "answer": answer,
             "citations": citations(context),
             "confidence": deterministic["confidence"],
@@ -385,6 +388,7 @@ async def readonly_chat(
             "model": model,
             "intent": deterministic["intent"],
             "audit": audit,
+            "evidence_record": context["evidence_record"],
             "action_executed": False,
         }
 
@@ -420,6 +424,7 @@ async def readonly_chat(
     )
     return {
         "version": VERSION,
+        "answer_type": "llm",
         "answer": answer,
         "citations": citations(context),
         "confidence": context["investigation"].get("confidence", "insufficient"),
@@ -430,6 +435,7 @@ async def readonly_chat(
             "response_tokens": generated["response_tokens"],
         },
         "audit": audit,
+        "evidence_record": context["evidence_record"],
         "action_executed": False,
     }
 

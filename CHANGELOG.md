@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.4] - 2026-07-31
+
+- Added stable answer type and evidence-record metadata to every successful chat response.
+
 ## [1.1.3] - 2026-07-31
 
 ### Added

@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.3 — Accurate Evidence Chat**
+Current release: **1.1.4 — Structured Evidence Chat**
 
 ## What version 0 shows
 
@@ -144,6 +144,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.1 | Authenticated model discovery and exact Qwen tag resolution | Complete |
 | 1.1.2 | Timestamped chatbot question, latency and accuracy evaluation | Complete |
 | 1.1.3 | Deterministic authoritative answers; acceptance accuracy 100% | Current |
+| 1.1.4 | Structured deterministic, refusal, and LLM response contract | Current |
 
 ## Project documents
 
