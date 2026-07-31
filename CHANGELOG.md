@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.5] - 2026-07-31
+
+- Added client-supplied or generated UUID chat sessions persisted in chat audit records.
+
 ## [1.1.4] - 2026-07-31
 
 - Added stable answer type and evidence-record metadata to every successful chat response.

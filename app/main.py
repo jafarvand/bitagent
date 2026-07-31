@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -46,7 +47,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.4"
+VERSION = "1.1.5"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -307,6 +308,7 @@ async def policy_evaluate(
 
 class ChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
+    session_id: UUID = Field(default_factory=uuid4)
 
 
 @app.post("/api/v0/chat")
@@ -321,6 +323,7 @@ async def readonly_chat(
             detail={"code": "chat_role_denied", "reason": decision["reason"]},
         )
     normalized_role = decision["role"]
+    session_id = str(request.session_id)
     question = redact(request.question.strip())
     context = build_chat_context(
         settings.evidence_db_path,
@@ -349,9 +352,11 @@ async def readonly_chat(
             evidence_record_id=evidence_record_id,
             success=True,
             error_code="prohibited_action_refused",
+            session_id=session_id,
         )
         return {
             "version": VERSION,
+            "session_id": session_id,
             "answer_type": "policy_refusal",
             "answer": answer,
             "citations": citations(context),
@@ -377,9 +382,11 @@ async def readonly_chat(
             answer=answer,
             evidence_record_id=evidence_record_id,
             success=True,
+            session_id=session_id,
         )
         return {
             "version": VERSION,
+            "session_id": session_id,
             "answer_type": "deterministic",
             "answer": answer,
             "citations": citations(context),
@@ -404,6 +411,7 @@ async def readonly_chat(
             evidence_record_id=evidence_record_id,
             success=False,
             error_code="ollama_unavailable",
+            session_id=session_id,
         )
         raise HTTPException(
             status_code=503,
@@ -421,9 +429,11 @@ async def readonly_chat(
         answer=answer,
         evidence_record_id=evidence_record_id,
         success=True,
+        session_id=session_id,
     )
     return {
         "version": VERSION,
+        "session_id": session_id,
         "answer_type": "llm",
         "answer": answer,
         "citations": citations(context),

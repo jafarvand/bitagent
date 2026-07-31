@@ -39,7 +39,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.1.4"
+    assert response.json()["version"] == "1.1.5"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -188,7 +188,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.1.4",
+        "version": "1.1.5",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -230,6 +230,7 @@ def test_readonly_chat_refuses_exchange_actions_without_calling_model(monkeypatc
     assert body["action_executed"] is False
     assert "cannot perform" in body["answer"]
     assert body["audit"]["audit_hash"]
+    assert len(body["session_id"]) == 36
 
 
 @pytest.mark.parametrize(
@@ -328,6 +329,7 @@ def test_readonly_chat_is_grounded_cited_redacted_and_audited(monkeypatch):
     assert audit["items"][0]["success"] is True
     assert "question_text" not in audit["items"][0]
     assert "answer_text" not in audit["items"][0]
+    assert audit["items"][0]["session_id"] == body["session_id"]
 
 
 def test_readonly_chat_denies_anonymous_even_in_observe_mode():
@@ -459,7 +461,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.1.4"
+    assert report["version"] == "1.1.5"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -554,7 +556,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.1.4"
+    assert manifest["current_version"] == "1.1.5"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.4 — Structured Evidence Chat**
+Current release: **1.1.5 — Chat Sessions**
 
 ## What version 0 shows
 
@@ -145,6 +145,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.2 | Timestamped chatbot question, latency and accuracy evaluation | Complete |
 | 1.1.3 | Deterministic authoritative answers; acceptance accuracy 100% | Current |
 | 1.1.4 | Structured deterministic, refusal, and LLM response contract | Current |
+| 1.1.5 | UUID chat sessions persisted with every audit record | Current |
 
 ## Project documents
 

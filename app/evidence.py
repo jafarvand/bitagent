@@ -77,6 +77,14 @@ def _connect(path: str) -> sqlite3.Connection:
         )
         """
     )
+    chat_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(chat_audit)").fetchall()
+    }
+    if "session_id" not in chat_columns:
+        connection.execute(
+            "ALTER TABLE chat_audit ADD COLUMN session_id TEXT NOT NULL DEFAULT ''"
+        )
     return connection
 
 
@@ -357,6 +365,7 @@ def record_chat(
     evidence_record_id: int | None,
     success: bool,
     error_code: str | None = None,
+    session_id: str = "",
 ) -> dict:
     created_at = datetime.now(UTC).isoformat()
     safe_question = question[:2000]
@@ -371,6 +380,7 @@ def record_chat(
             "evidence_record_id": evidence_record_id,
             "success": success,
             "error_code": error_code,
+            "session_id": session_id,
         }
     )
     audit_hash = hashlib.sha256(material.encode()).hexdigest()
@@ -379,8 +389,8 @@ def record_chat(
             """
             INSERT INTO chat_audit (
                 created_at, role, model, question_text, answer_text,
-                evidence_record_id, success, error_code, audit_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                evidence_record_id, success, error_code, audit_hash, session_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 created_at,
@@ -392,6 +402,7 @@ def record_chat(
                 int(success),
                 error_code,
                 audit_hash,
+                session_id,
             ),
         )
     return {
@@ -406,7 +417,7 @@ def recent_chat_audit(path: str, limit: int) -> list[dict]:
         rows = connection.execute(
             """
             SELECT id, created_at, role, model, evidence_record_id, success,
-                   error_code, audit_hash
+                   error_code, audit_hash, session_id
             FROM chat_audit ORDER BY id DESC LIMIT ?
             """,
             (limit,),
