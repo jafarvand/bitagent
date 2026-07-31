@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.15] - 2026-07-31
+
+- Added configurable per-role/session chat rate limiting with retry guidance.
+
 ## [1.1.14] - 2026-07-31
 
 - Added whitespace normalization and fail-fast control-character rejection.

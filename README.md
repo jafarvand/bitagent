@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.14 — Question Validation**
+Current release: **1.1.15 — Chat Rate Limits**
 
 ## What version 0 shows
 
@@ -157,6 +157,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.12 | Deterministic capability-gap answers from the feature registry | Current |
 | 1.1.13 | Fail-closed readiness boundary answers | Current |
 | 1.1.14 | Normalized questions and control-character rejection | Current |
+| 1.1.15 | Per-role/session in-memory chat rate limiting | Current |
 
 ## Project documents
 

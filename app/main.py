@@ -16,6 +16,7 @@ from app.chat import (
     build_prompt,
     citations,
     deterministic_answer,
+    chat_rate_limiter,
     is_prohibited,
     intent_category,
     redact,
@@ -50,7 +51,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.14"
+VERSION = "1.1.15"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -337,6 +338,17 @@ async def readonly_chat(
         )
     normalized_role = decision["role"]
     session_id = str(request.session_id)
+    allowed, retry_after = chat_rate_limiter.check(
+        f"{normalized_role}:{session_id}", settings.chat_requests_per_minute
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "chat_rate_limited",
+                "retry_after_seconds": retry_after,
+            },
+        )
     question = redact(request.question.strip())
     context = build_chat_context(
         settings.evidence_db_path,

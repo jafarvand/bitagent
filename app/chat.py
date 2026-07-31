@@ -1,5 +1,7 @@
 import json
 import re
+import time
+from collections import defaultdict, deque
 from datetime import UTC, datetime
 
 from app.briefs import daily_executive_brief
@@ -23,6 +25,27 @@ SECRET_PATTERNS = (
     re.compile(r"(?i)(password|secret|token|api[-_ ]?key)\s*[:=]\s*\S+"),
     re.compile(r"(?i)\bbasic\s+[a-z0-9+/=]{8,}"),
 )
+
+
+class ChatRateLimiter:
+    def __init__(self):
+        self._requests: dict[str, deque[float]] = defaultdict(deque)
+
+    def check(self, key: str, limit: int) -> tuple[bool, int]:
+        now = time.monotonic()
+        window = self._requests[key]
+        while window and now - window[0] >= 60:
+            window.popleft()
+        if len(window) >= limit:
+            return False, max(1, round(60 - (now - window[0])))
+        window.append(now)
+        return True, 0
+
+    def clear(self) -> None:
+        self._requests.clear()
+
+
+chat_rate_limiter = ChatRateLimiter()
 
 
 def redact(text: str) -> str:
