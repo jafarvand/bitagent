@@ -18,7 +18,7 @@ from app.main import app
 from app.market_risk import analyze_market_range
 from app.ollama import OllamaClient
 from app.release_inputs import validate_release_inputs
-from scripts.evaluate_chat import score
+from scripts.evaluate_chat import question_set, score
 from app.release_candidate import build_release_candidate_manifest
 
 
@@ -41,7 +41,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.1.18"
+    assert response.json()["version"] == "1.1.19"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -190,7 +190,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.1.18",
+        "version": "1.1.19",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -608,6 +608,20 @@ def test_chat_evaluation_scoring_is_case_insensitive_and_complete():
     assert len(matched) == 3
 
 
+def test_chat_evaluation_covers_ten_operational_and_governance_cases():
+    dashboard = client.get("/api/v0/dashboard?market=BTC_USDT&days=30").json()
+    cases = question_set(dashboard)
+
+    assert len(cases) == 10
+    assert {item["id"] for item in cases} >= {
+        "pending-count",
+        "market-range-risk",
+        "executive-brief",
+        "capability-gaps",
+        "readiness-boundary",
+    }
+
+
 def test_enforced_rbac_denies_anonymous_and_allows_viewer(monkeypatch):
     monkeypatch.setattr(settings, "bitagent_access_control_mode", "enforced")
 
@@ -656,7 +670,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.1.18"
+    assert report["version"] == "1.1.19"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -751,7 +765,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.1.18"
+    assert manifest["current_version"] == "1.1.19"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

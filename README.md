@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.18 — Citation Integrity**
+Current release: **1.1.19 — Expanded Chat Evaluation**
 
 ## What version 0 shows
 
@@ -160,7 +160,8 @@ answers score zero and are never omitted from the overall result.
 | 1.1.15 | Per-role/session in-memory chat rate limiting | Current |
 | 1.1.16 | Bounded and compacted Ollama evidence context | Current |
 | 1.1.17 | Non-empty, bounded, cited, redacted, non-executing answer gates | Current |
-| 1.1.18 | Required citation timestamps, record IDs, and evidence hashes | Current |
+| 1.1.18 | Required citation timestamps, record IDs, and evidence hashes | Complete |
+| 1.1.19 | Ten-case operational, safety, capability, and governance evaluation | Current |
 
 ## Project documents
 

@@ -52,7 +52,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.18"
+VERSION = "1.1.19"
 ROOT = Path(__file__).parent
 
 app = FastAPI(

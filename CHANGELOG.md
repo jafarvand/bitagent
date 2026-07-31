@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.19] - 2026-07-31
+
+- Expanded chat acceptance evaluation from six to ten operational and governance cases.
+
 ## [1.1.18] - 2026-07-31
 
 - Added citation completeness gates for source time, record ID, and evidence hash.
