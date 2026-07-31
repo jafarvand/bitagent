@@ -47,6 +47,20 @@ def deterministic_answer(question: str, context: dict) -> dict | None:
     market = context["market"].get("data", {})
     market_risk = context["market_risk"]
 
+    if "readiness" in normalized or "ready for" in normalized or "go live" in normalized:
+        audit_valid = context["audit_chain_valid"]
+        missing_count = len(context["feature_gaps"])
+        ready = audit_valid and missing_count == 0
+        return {
+            "intent": "readiness_boundary",
+            "answer": (
+                f"The retained evidence chain is {'valid' if audit_valid else 'invalid'}, "
+                f"and {missing_count} capabilities are still marked missing. "
+                f"The system is {'ready' if ready else 'not ready'} for an unrestricted "
+                "go-live decision; formal owner approval remains authoritative."
+            ),
+            "confidence": "high",
+        }
     if "missing feature" in normalized or "capability gap" in normalized or (
         "what" in normalized and "unavailable" in normalized
     ):
@@ -189,6 +203,8 @@ def intent_category(intent: str) -> str:
         return "management"
     if intent == "feature_gaps":
         return "capability"
+    if intent == "readiness_boundary":
+        return "governance"
     return "general"
 
 
