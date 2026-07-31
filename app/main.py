@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app import mock_data
 from app.config import settings
@@ -50,7 +50,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.13"
+VERSION = "1.1.14"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -312,6 +312,16 @@ async def policy_evaluate(
 class ChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     session_id: UUID = Field(default_factory=uuid4)
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        if any(ord(character) < 32 for character in value):
+            raise ValueError("control characters are not allowed")
+        normalized = " ".join(value.split())
+        if len(normalized) < 2:
+            raise ValueError("question must contain meaningful text")
+        return normalized
 
 
 @app.post("/api/v0/chat")

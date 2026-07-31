@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.14] - 2026-07-31
+
+- Added whitespace normalization and fail-fast control-character rejection.
+
 ## [1.1.13] - 2026-07-31
 
 - Added fail-closed readiness answers using audit integrity and capability gaps.
