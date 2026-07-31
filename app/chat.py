@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from app.briefs import daily_executive_brief
 from app.evidence import latest_evidence_payload, verify_chain
+from app.features import FEATURES
 from app.investigations import withdrawal_investigation
 
 
@@ -46,6 +47,19 @@ def deterministic_answer(question: str, context: dict) -> dict | None:
     market = context["market"].get("data", {})
     market_risk = context["market_risk"]
 
+    if "missing feature" in normalized or "capability gap" in normalized or (
+        "what" in normalized and "unavailable" in normalized
+    ):
+        missing = context["feature_gaps"]
+        names = ", ".join(item["name"] for item in missing)
+        return {
+            "intent": "feature_gaps",
+            "answer": (
+                f"The current capability map marks these features missing: {names}. "
+                "They require new approved upstream evidence."
+            ),
+            "confidence": "high",
+        }
     if "market risk" in normalized or "range" in normalized or "volatility" in normalized:
         range_percent = market_risk["metrics"].get("range_percent")
         range_text = (
@@ -173,6 +187,8 @@ def intent_category(intent: str) -> str:
         return "evidence_quality"
     if intent == "daily_executive_brief":
         return "management"
+    if intent == "feature_gaps":
+        return "capability"
     return "general"
 
 
@@ -209,6 +225,11 @@ def build_chat_context(
         "market_risk": payload["market_risk"],
         "investigation": report,
         "brief": brief,
+        "feature_gaps": [
+            {"id": item["id"], "name": item["name"], "source": item["source"]}
+            for item in FEATURES
+            if item["status"] == "missing"
+        ],
         "audit_chain_valid": verify_chain(path)["valid"],
     }
 

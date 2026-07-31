@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.11 — Market Risk Answers**
+Current release: **1.1.12 — Capability Gap Answers**
 
 ## What version 0 shows
 
@@ -154,6 +154,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.9 | Deterministic pending-withdrawal trend answers | Current |
 | 1.1.10 | Deterministic executive brief and priority answers | Current |
 | 1.1.11 | Bounded deterministic market-range risk answers | Current |
+| 1.1.12 | Deterministic capability-gap answers from the feature registry | Current |
 
 ## Project documents
 
