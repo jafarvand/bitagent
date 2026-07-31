@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.20] - 2026-07-31
+
+- Added a role-protected chat health endpoint without secret disclosure.
+
 ## [1.1.19] - 2026-07-31
 
 - Expanded chat acceptance evaluation from six to ten operational and governance cases.

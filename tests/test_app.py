@@ -41,7 +41,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.1.19"
+    assert response.json()["version"] == "1.1.20"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -61,6 +61,21 @@ def test_status_reports_llm_configuration_without_credentials():
     assert body["chat_enabled"] is False
     assert body["llm"]["provider"] == "ollama"
     assert body["llm"]["model"] == "qwen"
+    assert "password" not in str(body).lower()
+
+
+def test_chat_health_reports_safe_dependency_state_without_secrets():
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
+    body = client.get(
+        "/api/v0/chat/health",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+
+    assert body["version"] == "1.1.20"
+    assert body["status"] == "operational"
+    assert body["read_only"] is True
+    assert body["deterministic_answers_available"] is True
+    assert body["audit_chain_valid"] is True
     assert "password" not in str(body).lower()
 
 
@@ -190,7 +205,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.1.19",
+        "version": "1.1.20",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -670,7 +685,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.1.19"
+    assert report["version"] == "1.1.20"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -765,7 +780,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.1.19"
+    assert manifest["current_version"] == "1.1.20"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

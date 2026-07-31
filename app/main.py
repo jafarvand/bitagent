@@ -52,7 +52,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.19"
+VERSION = "1.1.20"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -496,6 +496,32 @@ async def readonly_chat(
         "audit": audit,
         "evidence_record": context["evidence_record"],
         "action_executed": False,
+    }
+
+
+@app.get("/api/v0/chat/health")
+async def chat_health(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("use_readonly_chat", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "chat_role_denied"})
+    username, password = settings.ollama_credentials()
+    evidence_available = bool(recent_evidence(settings.evidence_db_path, 1))
+    chain = verify_chain(settings.evidence_db_path)
+    return {
+        "version": VERSION,
+        "status": "operational" if chain["valid"] else "degraded",
+        "read_only": True,
+        "deterministic_answers_available": evidence_available,
+        "evidence_available": evidence_available,
+        "audit_chain_valid": chain["valid"],
+        "ollama": {
+            "enabled": settings.bitagent_chat_enabled,
+            "base_url_configured": bool(settings.ollama_base_url),
+            "model_configured": bool(settings.ollama_model),
+            "basic_auth_configured": bool(username and password),
+        },
     }
 
 
