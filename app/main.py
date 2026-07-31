@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -52,7 +54,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.20"
+VERSION = "1.1.21"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -568,6 +570,34 @@ async def chat_session_history(
         "session_id": str(session_id),
         "items": items,
         "count": len(items),
+    }
+
+
+@app.get("/api/v0/chat/sessions/{session_id}/export")
+async def chat_session_export(
+    session_id: UUID,
+    limit: int = Query(default=100, ge=1, le=500),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("use_readonly_chat", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "chat_role_denied"})
+    items = chat_session_messages(
+        settings.evidence_db_path,
+        str(session_id),
+        role=decision["role"],
+        limit=limit,
+    )
+    receipt = hashlib.sha256(
+        json.dumps(items, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return {
+        "version": VERSION,
+        "session_id": str(session_id),
+        "items": items,
+        "count": len(items),
+        "receipt_sha256": receipt,
+        "action_executed": False,
     }
 
 

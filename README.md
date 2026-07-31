@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.20 — Chat Health**
+Current release: **1.1.21 — Verifiable Session Export**
 
 ## What version 0 shows
 
@@ -95,6 +95,7 @@ uvicorn app.main:app --reload
 - `POST /api/v0/chat` (operator/admin; retained evidence only)
 - `GET /api/v0/chat/models` (authenticated Ollama model discovery)
 - `GET /api/v0/chat/sessions/{session_id}` (bounded operator session history)
+- `GET /api/v0/chat/sessions/{session_id}/export` (bounded export with SHA-256 receipt)
 - `GET /api/v0/chat/health` (safe evidence, audit, and Ollama readiness state)
 - `GET /api/v0/audit/chat/recent` (auditor/admin; metadata only)
 - `GET /api/v0/audit/chat/sessions/{session_id}` (content-free session receipts)
@@ -163,7 +164,8 @@ answers score zero and are never omitted from the overall result.
 | 1.1.17 | Non-empty, bounded, cited, redacted, non-executing answer gates | Current |
 | 1.1.18 | Required citation timestamps, record IDs, and evidence hashes | Complete |
 | 1.1.19 | Ten-case operational, safety, capability, and governance evaluation | Complete |
-| 1.1.20 | Safe chat dependency and evidence health reporting | Current |
+| 1.1.20 | Safe chat dependency and evidence health reporting | Complete |
+| 1.1.21 | Bounded role-filtered session export with SHA-256 receipt | Current |
 
 ## Project documents
 

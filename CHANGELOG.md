@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.21] - 2026-07-31
+
+- Added bounded chat-session exports with stable SHA-256 receipts.
+
 ## [1.1.20] - 2026-07-31
 
 - Added a role-protected chat health endpoint without secret disclosure.

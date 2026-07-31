@@ -41,7 +41,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.1.20"
+    assert response.json()["version"] == "1.1.21"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -71,7 +71,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "1.1.20"
+    assert body["version"] == "1.1.21"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -205,7 +205,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.1.20",
+        "version": "1.1.21",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -469,6 +469,36 @@ def test_chat_session_history_is_bounded_and_role_filtered():
     assert viewer.status_code == 403
 
 
+def test_chat_session_export_has_stable_receipt_and_no_action():
+    client.get("/api/v0/dashboard")
+    session_id = "cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa"
+    client.post(
+        "/api/v0/chat",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"session_id": session_id, "question": "How many withdrawals are pending?"},
+    )
+
+    first = client.get(
+        f"/api/v0/chat/sessions/{session_id}/export",
+        headers={"X-BitAgent-Role": "operator"},
+    )
+    second = client.get(
+        f"/api/v0/chat/sessions/{session_id}/export",
+        headers={"X-BitAgent-Role": "operator"},
+    )
+    denied = client.get(
+        f"/api/v0/chat/sessions/{session_id}/export",
+        headers={"X-BitAgent-Role": "viewer"},
+    )
+
+    assert first.status_code == 200
+    assert first.json()["count"] == 1
+    assert len(first.json()["receipt_sha256"]) == 64
+    assert first.json()["receipt_sha256"] == second.json()["receipt_sha256"]
+    assert first.json()["action_executed"] is False
+    assert denied.status_code == 403
+
+
 def test_auditor_can_review_session_receipts_without_content():
     client.get("/api/v0/dashboard")
     session_id = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
@@ -685,7 +715,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.1.20"
+    assert report["version"] == "1.1.21"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -780,7 +810,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.1.20"
+    assert manifest["current_version"] == "1.1.21"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
