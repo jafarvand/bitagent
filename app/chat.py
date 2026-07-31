@@ -44,7 +44,23 @@ def deterministic_answer(question: str, context: dict) -> dict | None:
     operation_meta = operations.get("meta", {})
     incident = context["incident"]
     market = context["market"].get("data", {})
+    market_risk = context["market_risk"]
 
+    if "market risk" in normalized or "range" in normalized or "volatility" in normalized:
+        range_percent = market_risk["metrics"].get("range_percent")
+        range_text = (
+            f"{range_percent}%" if range_percent is not None else "unavailable"
+        )
+        return {
+            "intent": "market_range_risk",
+            "answer": (
+                f"{market_risk['market']} market-range severity is "
+                f"{market_risk['severity']}; the observed high-low range is "
+                f"{range_text}. Confidence is {market_risk['confidence']}. "
+                "This range is not statistical volatility."
+            ),
+            "confidence": market_risk["confidence"],
+        }
     if "brief" in normalized or "priorit" in normalized:
         brief = context["brief"]
         priorities = ", ".join(
@@ -151,7 +167,7 @@ def intent_category(intent: str) -> str:
         "pending_withdrawal_trend",
     }:
         return "operations"
-    if intent == "market_symbol":
+    if intent in {"market_symbol", "market_range_risk"}:
         return "market"
     if intent == "root_cause_boundary":
         return "evidence_quality"

@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.11] - 2026-07-31
+
+- Added bounded market-range risk answers with explicit volatility limitations.
+
 ## [1.1.10] - 2026-07-31
 
 - Added deterministic executive brief and priority chat answers.
