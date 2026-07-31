@@ -45,6 +45,15 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'aria-live="polite"' in response.text
 
 
+def test_status_reports_llm_configuration_without_credentials():
+    body = client.get("/api/v0/status").json()
+
+    assert body["chat_enabled"] is False
+    assert body["llm"]["provider"] == "ollama"
+    assert body["llm"]["model"] == "qwen"
+    assert "password" not in str(body).lower()
+
+
 def test_dashboard_mock_contract():
     response = client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
     assert response.status_code == 200

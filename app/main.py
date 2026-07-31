@@ -81,6 +81,7 @@ async def health():
 @app.get("/api/v0/status")
 async def status():
     key_id, secret = settings.exchange_credentials()
+    ollama_username, ollama_password = settings.ollama_credentials()
     return {
         "name": "bitAgent",
         "version": VERSION,
@@ -93,6 +94,13 @@ async def status():
         "timestamp": datetime.now(UTC).isoformat(),
         "access_control_mode": settings.bitagent_access_control_mode,
         "identity_proof": "pilot_role_header_only",
+        "chat_enabled": settings.bitagent_chat_enabled,
+        "llm": {
+            "provider": settings.llm_provider,
+            "base_url_configured": bool(settings.ollama_base_url),
+            "model": settings.ollama_model,
+            "basic_auth_configured": bool(ollama_username and ollama_password),
+        },
     }
 
 

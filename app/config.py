@@ -1,11 +1,15 @@
 from decimal import Decimal
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(".env", ".env.local"),
+        extra="ignore",
+    )
 
     bitagent_mode: Literal["mock", "live"] = "mock"
     exchange_api_base_url: str = "https://devapi.zekabot.com"
@@ -23,6 +27,16 @@ class Settings(BaseSettings):
     bitagent_access_control_mode: Literal["observe", "enforced"] = "observe"
     upstream_security_report_path: str = ".data/upstream-security-report.json"
     release_evidence_directory: str = "integration-input/release-evidence"
+    bitagent_chat_enabled: bool = False
+    llm_provider: Literal["ollama"] = "ollama"
+    ollama_base_url: str = "https://ollama.zekabot.com"
+    ollama_model: str = "qwen"
+    ollama_username: str = ""
+    ollama_password: SecretStr = SecretStr("")
+    ollama_timeout_seconds: float = 60.0
+
+    def ollama_credentials(self) -> tuple[str, str]:
+        return self.ollama_username, self.ollama_password.get_secret_value()
 
     def exchange_credentials(self) -> tuple[str, str]:
         """Return explicit client credentials or the first server-style pair."""

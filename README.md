@@ -48,6 +48,23 @@ EXCHANGE_BOT_SECRET=replace-locally
 Never commit `.env` or a real signing secret. The key ID is public; the secret
 must remain only in an approved local secret store.
 
+## Ollama chat provider
+
+The planned chat agent is configured for an HTTPS Ollama endpoint and remains
+disabled until a non-exposed password is installed locally:
+
+```env
+BITAGENT_CHAT_ENABLED=false
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=https://ollama.zekabot.com
+OLLAMA_MODEL=qwen
+OLLAMA_USERNAME=replace-locally
+OLLAMA_PASSWORD=replace-locally-after-rotation
+```
+
+Use the exact model name returned by `GET /api/tags` after authentication. Never
+commit the Basic Auth password or place it in a URL.
+
 ## Local Python run
 
 ```bash
