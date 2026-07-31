@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.9] - 2026-07-31
+
+- Added deterministic pending-withdrawal trend and direction answers.
+
 ## [1.1.8] - 2026-07-31
 
 - Added stable chat question categories for routing and quality analytics.

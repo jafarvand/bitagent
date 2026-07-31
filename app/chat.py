@@ -44,6 +44,30 @@ def deterministic_answer(question: str, context: dict) -> dict | None:
     incident = context["incident"]
     market = context["market"].get("data", {})
 
+    if (
+        "trend" in normalized
+        or "change" in normalized
+        or "increased" in normalized
+        or "decreased" in normalized
+    ) and "pending" in normalized:
+        change = context["investigation"].get("supporting_evidence", {}).get(
+            "pending_change"
+        )
+        if change is None:
+            answer = "The retained evidence is insufficient to establish a pending-withdrawal trend."
+            confidence = "insufficient"
+        else:
+            direction = "increased" if change > 0 else "decreased" if change < 0 else "was unchanged"
+            answer = (
+                f"Pending withdrawals {direction} by {abs(change)} across the "
+                "retained evidence window."
+            )
+            confidence = "high"
+        return {
+            "intent": "pending_withdrawal_trend",
+            "answer": answer,
+            "confidence": confidence,
+        }
     if "root cause" in normalized or (
         "prove" in normalized and ("warning" in normalized or "incident" in normalized)
     ):
@@ -108,6 +132,7 @@ def intent_category(intent: str) -> str:
         "pending_withdrawal_count",
         "withdrawal_incident_severity",
         "operations_freshness",
+        "pending_withdrawal_trend",
     }:
         return "operations"
     if intent == "market_symbol":
