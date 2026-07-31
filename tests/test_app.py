@@ -17,6 +17,7 @@ from app.main import app
 from app.market_risk import analyze_market_range
 from app.ollama import OllamaClient
 from app.release_inputs import validate_release_inputs
+from scripts.evaluate_chat import score
 from app.release_candidate import build_release_candidate_manifest
 
 
@@ -38,7 +39,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.1.1"
+    assert response.json()["version"] == "1.1.2"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -187,7 +188,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.1.1",
+        "version": "1.1.2",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -341,6 +342,16 @@ def test_ollama_contract_discovers_qwen_tag_and_generates_with_basic_auth(
     assert [request.url.path for request in requests] == ["/api/tags", "/api/generate"]
 
 
+def test_chat_evaluation_scoring_is_case_insensitive_and_complete():
+    accuracy, matched = score(
+        "Warning: 42 withdrawals. No action executed by bitAgent.",
+        ["warning", "42", "NO ACTION EXECUTED BY BITAGENT."],
+    )
+
+    assert accuracy == 100
+    assert len(matched) == 3
+
+
 def test_enforced_rbac_denies_anonymous_and_allows_viewer(monkeypatch):
     monkeypatch.setattr(settings, "bitagent_access_control_mode", "enforced")
 
@@ -389,7 +400,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.1.1"
+    assert report["version"] == "1.1.2"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -484,7 +495,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.1.1"
+    assert manifest["current_version"] == "1.1.2"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

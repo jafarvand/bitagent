@@ -109,6 +109,18 @@ call.
 pytest
 ```
 
+## Chat evaluation
+
+Run the evidence-derived acceptance set against the local service:
+
+```bash
+python -m scripts.evaluate_chat --base-url http://127.0.0.1:8999
+```
+
+The harness records UTC question time, latency, answer, expected and matched
+facts, accuracy, model and audit ID under `.data/evaluations/`. Unavailable
+answers score zero and are never omitted from the overall result.
+
 ## Version plan
 
 | Version | Focus | Status |
@@ -129,7 +141,8 @@ pytest
 | 0.10.0 | Fail-closed 1.0 candidate decision and evidence receipt | Complete |
 | 1.0.0 | Read-only pilot release; evidence gates remain fail-closed | Complete |
 | 1.1.0 | Ollama/Qwen read-only evidence chatbot with citations and audit | Complete |
-| 1.1.1 | Authenticated model discovery and exact Qwen tag resolution | Current |
+| 1.1.1 | Authenticated model discovery and exact Qwen tag resolution | Complete |
+| 1.1.2 | Timestamped chatbot question, latency and accuracy evaluation | Current |
 
 ## Project documents
 

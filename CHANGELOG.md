@@ -2,6 +2,15 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.2] - 2026-07-31
+
+### Added
+
+- Reproducible six-question read-only chat acceptance evaluation.
+- Evidence-derived expected facts and deterministic term scoring.
+- UTC timestamps, latency, answer, model, audit ID and accuracy logs.
+- Failures and unavailable answers count as zero accuracy.
+
 ## [1.1.1] - 2026-07-31
 
 ### Added

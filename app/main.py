@@ -45,7 +45,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
