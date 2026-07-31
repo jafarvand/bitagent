@@ -448,6 +448,23 @@ def chat_session_messages(
     ]
 
 
+def chat_session_audit(path: str, session_id: str, limit: int) -> list[dict]:
+    with _connect(path) as connection:
+        rows = connection.execute(
+            """
+            SELECT id, created_at, role, model, evidence_record_id, success,
+                   error_code, audit_hash, session_id
+            FROM chat_audit WHERE session_id = ?
+            ORDER BY id ASC LIMIT ?
+            """,
+            (session_id, limit),
+        ).fetchall()
+    return [
+        {**dict(row), "success": bool(row["success"])}
+        for row in rows
+    ]
+
+
 def backup_and_verify(source_path: str, backup_path: str) -> dict:
     """Create a consistent SQLite backup and verify its evidence hash chain."""
     source = Path(source_path)

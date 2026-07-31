@@ -39,7 +39,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.1.6"
+    assert response.json()["version"] == "1.1.7"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -188,7 +188,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.1.6",
+        "version": "1.1.7",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -361,6 +361,33 @@ def test_chat_session_history_is_bounded_and_role_filtered():
     assert viewer.status_code == 403
 
 
+def test_auditor_can_review_session_receipts_without_content():
+    client.get("/api/v0/dashboard")
+    session_id = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+    client.post(
+        "/api/v0/chat",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"session_id": session_id, "question": "How many withdrawals are pending?"},
+    )
+
+    response = client.get(
+        f"/api/v0/audit/chat/sessions/{session_id}",
+        headers={"X-BitAgent-Role": "auditor"},
+    )
+    denied = client.get(
+        f"/api/v0/audit/chat/sessions/{session_id}",
+        headers={"X-BitAgent-Role": "operator"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["content_exposed"] is False
+    assert "question_text" not in body["items"][0]
+    assert "answer_text" not in body["items"][0]
+    assert denied.status_code == 403
+
+
 def test_readonly_chat_denies_anonymous_even_in_observe_mode():
     client.get("/api/v0/dashboard")
     response = client.post(
@@ -490,7 +517,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.1.6"
+    assert report["version"] == "1.1.7"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -585,7 +612,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.1.6"
+    assert manifest["current_version"] == "1.1.7"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

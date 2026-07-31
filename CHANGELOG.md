@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.7] - 2026-07-31
+
+- Added auditor-only per-session receipts without question or answer content.
+
 ## [1.1.6] - 2026-07-31
 
 - Added bounded, UUID-addressed, role-filtered conversation history.

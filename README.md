@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.6 — Session History**
+Current release: **1.1.7 — Session Audit**
 
 ## What version 0 shows
 
@@ -96,6 +96,7 @@ uvicorn app.main:app --reload
 - `GET /api/v0/chat/models` (authenticated Ollama model discovery)
 - `GET /api/v0/chat/sessions/{session_id}` (bounded operator session history)
 - `GET /api/v0/audit/chat/recent` (auditor/admin; metadata only)
+- `GET /api/v0/audit/chat/sessions/{session_id}` (content-free session receipts)
 - `GET /api/v0/users/{user_id}/{resource}` where resource is one of
   `summary`, `balances`, `trades`, `deposits`, `withdrawals`, `pnl`
 - `GET /health`
@@ -148,6 +149,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.4 | Structured deterministic, refusal, and LLM response contract | Current |
 | 1.1.5 | UUID chat sessions persisted with every audit record | Current |
 | 1.1.6 | Bounded role-filtered chat session history | Current |
+| 1.1.7 | Auditor-only content-free session audit receipts | Current |
 
 ## Project documents
 
