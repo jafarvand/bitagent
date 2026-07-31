@@ -21,6 +21,14 @@ PROHIBITED_REQUESTS = (
     "restart service",
     "change configuration",
 )
+PROMPT_INJECTION_PATTERNS = (
+    "ignore previous instructions",
+    "ignore all rules",
+    "reveal system prompt",
+    "show hidden prompt",
+    "developer message",
+    "override your instructions",
+)
 SECRET_PATTERNS = (
     re.compile(r"(?i)(password|secret|token|api[-_ ]?key)\s*[:=]\s*\S+"),
     re.compile(r"(?i)\bbasic\s+[a-z0-9+/=]{8,}"),
@@ -58,6 +66,11 @@ def redact(text: str) -> str:
 def is_prohibited(question: str) -> bool:
     normalized = " ".join(question.lower().split())
     return any(phrase in normalized for phrase in PROHIBITED_REQUESTS)
+
+
+def detects_prompt_injection(question: str) -> bool:
+    normalized = " ".join(question.lower().split())
+    return any(phrase in normalized for phrase in PROMPT_INJECTION_PATTERNS)
 
 
 def deterministic_answer(question: str, context: dict) -> dict | None:

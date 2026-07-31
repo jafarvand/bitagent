@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.21 — Verifiable Session Export**
+Current release: **1.1.22 — Prompt-Injection Defense**
 
 ## What version 0 shows
 
@@ -165,7 +165,8 @@ answers score zero and are never omitted from the overall result.
 | 1.1.18 | Required citation timestamps, record IDs, and evidence hashes | Complete |
 | 1.1.19 | Ten-case operational, safety, capability, and governance evaluation | Complete |
 | 1.1.20 | Safe chat dependency and evidence health reporting | Complete |
-| 1.1.21 | Bounded role-filtered session export with SHA-256 receipt | Current |
+| 1.1.21 | Bounded role-filtered session export with SHA-256 receipt | Complete |
+| 1.1.22 | Deterministic prompt-injection detection, refusal, and audit | Current |
 
 ## Project documents
 

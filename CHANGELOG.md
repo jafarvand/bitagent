@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.22] - 2026-07-31
+
+- Added deterministic prompt-injection detection, refusal, and audit receipts.
+
 ## [1.1.21] - 2026-07-31
 
 - Added bounded chat-session exports with stable SHA-256 receipts.

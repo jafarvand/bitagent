@@ -19,6 +19,7 @@ from app.chat import (
     answer_quality,
     citations,
     deterministic_answer,
+    detects_prompt_injection,
     chat_rate_limiter,
     is_prohibited,
     intent_category,
@@ -54,7 +55,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.21"
+VERSION = "1.1.22"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -365,6 +366,42 @@ async def readonly_chat(
         )
 
     evidence_record_id = context["evidence_record"]["id"]
+    if detects_prompt_injection(question):
+        answer = (
+            "I cannot follow instructions that attempt to override policy or reveal "
+            "hidden prompts. Ask a direct question about retained evidence instead. "
+            "No action executed by bitAgent."
+        )
+        evidence_citations = citations(context)
+        quality = answer_quality(answer, evidence_citations)
+        audit = record_chat(
+            settings.evidence_db_path,
+            role=normalized_role,
+            model="safety-refusal",
+            question=question,
+            answer=answer,
+            evidence_record_id=evidence_record_id,
+            success=True,
+            error_code="prompt_injection_refused",
+            session_id=session_id,
+        )
+        return {
+            "version": VERSION,
+            "session_id": session_id,
+            "answer_type": "safety_refusal",
+            "category": "safety",
+            "answer": answer,
+            "citations": evidence_citations,
+            "quality": quality,
+            "confidence": "policy_certain",
+            "limitations": context["investigation"].get("limitations", []),
+            "model": "safety-refusal",
+            "intent": "prompt_injection_refusal",
+            "audit": audit,
+            "evidence_record": context["evidence_record"],
+            "action_executed": False,
+        }
+
     if is_prohibited(question):
         answer = (
             "I cannot perform or assist with exchange write actions. I can only "
