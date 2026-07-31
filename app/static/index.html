@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>bitAgent · Secure Exchange Operations</title>
-  <link rel="stylesheet" href="/static/styles.css?v=1.0.0">
+  <link rel="stylesheet" href="/static/styles.css?v=1.1.0">
 </head>
 <body>
   <header class="topbar">
@@ -13,14 +13,14 @@
       <span id="mode-pill" class="pill neutral">connecting</span>
       <button id="refresh-live" class="refresh-button" type="button">Refresh live data</button>
       <span class="release-chip">READ-ONLY PILOT</span>
-      <span class="version">v<span id="version">1.0.0</span></span>
+      <span class="version">v<span id="version">1.1.0</span></span>
     </div>
   </header>
 
   <main>
     <section class="hero">
       <div>
-        <p class="eyebrow">VERSION 1.0.0 · READ-ONLY PILOT</p>
+        <p class="eyebrow">VERSION 1.1.0 · EVIDENCE CHAT</p>
         <h1>Prove every pass.<br><span>Expose every gap.</span></h1>
         <p class="intro">Replay evidence, local security checks, and explicit UAT gates show exactly what passes—and what still blocks the 1.0 pilot.</p>
       </div>
@@ -91,6 +91,27 @@
       </div>
     </section>
 
+    <section class="panel chat-panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">READ-ONLY EVIDENCE CHAT</p>
+          <h2>Ask bitAgent</h2>
+        </div>
+        <span id="chat-state" class="pill neutral">configured</span>
+      </div>
+      <div id="chat-messages" class="chat-messages" aria-live="polite">
+        <div class="chat-message assistant">Ask about the latest withdrawal signal, market evidence, freshness, limitations, or the approved investigation runbook.</div>
+      </div>
+      <form id="chat-form" class="chat-form">
+        <label for="chat-question">Operator question</label>
+        <div>
+          <input id="chat-question" maxlength="2000" autocomplete="off" placeholder="Why are withdrawals showing a warning?" required>
+          <button id="chat-send" type="submit">Ask</button>
+        </div>
+      </form>
+      <p id="chat-meta" class="chat-meta">Evidence only · operator role · no action capability</p>
+    </section>
+
     <section class="controls">
       <label>Market <input id="market" value="BTC_USDT" maxlength="20"></label>
       <label>Period
@@ -149,14 +170,14 @@
 
     <section class="panel coverage">
       <div class="panel-head">
-        <div><p class="eyebrow">1.0.0 CAPABILITY MAP</p><h2>Measured readiness, without false go-live claims</h2></div>
+        <div><p class="eyebrow">1.1.0 CAPABILITY MAP</p><h2>Measured readiness, without false go-live claims</h2></div>
         <div id="coverage-counts" class="coverage-counts"></div>
       </div>
       <div id="features" class="feature-list"></div>
     </section>
   </main>
 
-  <footer>bitAgent 1.0.0 · Read-only Pilot · Read-only exchange connector · No action executed</footer>
-  <script src="/static/app.js?v=1.0.0"></script>
+  <footer>bitAgent 1.1.0 · Evidence Chat · Read-only exchange connector · No action executed</footer>
+  <script src="/static/app.js?v=1.1.0"></script>
 </body>
 </html>

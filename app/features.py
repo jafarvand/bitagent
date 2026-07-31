@@ -1,5 +1,12 @@
 FEATURES = [
     {
+        "id": "readonly-chat",
+        "name": "Read-only evidence chat",
+        "status": "available",
+        "source": "POST /api/v0/chat",
+        "description": "Ollama answers over retained evidence with citations, refusal and audit.",
+    },
+    {
         "id": "auth-v02",
         "name": "Secure request signing",
         "status": "available",

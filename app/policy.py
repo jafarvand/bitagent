@@ -12,6 +12,7 @@ ROLE_CAPABILITIES = {
         "view_features",
         "view_user_investigation",
         "submit_feedback",
+        "use_readonly_chat",
     },
     "auditor": {
         "view_aggregate",
@@ -19,6 +20,7 @@ ROLE_CAPABILITIES = {
         "view_features",
         "view_user_investigation",
         "view_audit",
+        "view_chat_audit",
     },
     "admin": {
         "view_aggregate",
@@ -27,6 +29,8 @@ ROLE_CAPABILITIES = {
         "view_user_investigation",
         "submit_feedback",
         "view_audit",
+        "use_readonly_chat",
+        "view_chat_audit",
     },
 }
 

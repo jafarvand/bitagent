@@ -2,6 +2,17 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.0] - 2026-07-31
+
+### Added
+
+- First Ollama/Qwen read-only evidence chatbot.
+- Operator/admin chat authorization and auditor/admin chat metadata audit.
+- Deterministic prohibited-action refusal before model invocation.
+- Evidence citations, freshness, confidence, limitations and non-execution statement.
+- Prompt-injection boundary, credential redaction, bounded input and model timeout.
+- Responsive frontend chat panel.
+
 ## [1.0.0] - 2026-07-30
 
 ### Changed

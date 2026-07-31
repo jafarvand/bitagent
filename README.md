@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.0.0 — Read-only Pilot**
+Current release: **1.1.0 — Evidence Chat**
 
 ## What version 0 shows
 
@@ -50,8 +50,8 @@ must remain only in an approved local secret store.
 
 ## Ollama chat provider
 
-The planned chat agent is configured for an HTTPS Ollama endpoint and remains
-disabled until a non-exposed password is installed locally:
+The first read-only chat agent uses the configured HTTPS Ollama endpoint. It
+remains disabled until a non-exposed password is installed locally:
 
 ```env
 BITAGENT_CHAT_ENABLED=false
@@ -92,6 +92,8 @@ uvicorn app.main:app --reload
 - `GET /api/v0/evaluations/replay`
 - `GET /api/v0/readiness`
 - `GET /api/v0/releases/candidate` (1.0 gate decision and evidence receipt)
+- `POST /api/v0/chat` (operator/admin; retained evidence only)
+- `GET /api/v0/audit/chat/recent` (auditor/admin; metadata only)
 - `GET /api/v0/users/{user_id}/{resource}` where resource is one of
   `summary`, `balances`, `trades`, `deposits`, `withdrawals`, `pnl`
 - `GET /health`
@@ -124,7 +126,8 @@ pytest
 | 0.9.2 | Backup/restore verification and 1.0 evidence matrix | Complete |
 | 0.9.3 | Validated owner incident, security, identity and UAT inputs | Complete |
 | 0.10.0 | Fail-closed 1.0 candidate decision and evidence receipt | Complete |
-| 1.0.0 | Read-only pilot release; evidence gates remain fail-closed | Current |
+| 1.0.0 | Read-only pilot release; evidence gates remain fail-closed | Complete |
+| 1.1.0 | Ollama/Qwen read-only evidence chatbot with citations and audit | Current |
 
 ## Project documents
 

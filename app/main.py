@@ -10,21 +10,31 @@ from pydantic import BaseModel, Field
 from app import mock_data
 from app.config import settings
 from app.briefs import daily_executive_brief
+from app.chat import (
+    build_chat_context,
+    build_prompt,
+    citations,
+    is_prohibited,
+    redact,
+)
 from app.exchange import ExchangeAPIError, exchange_client
 from app.evidence import (
     evidence_trends,
     feedback_summary,
+    recent_chat_audit,
     recent_access_decisions,
     recent_evidence,
     record_dashboard,
     record_feedback,
     record_access_decision,
+    record_chat,
     verify_chain,
 )
 from app.features import FEATURES
 from app.incidents import detect_withdrawal_slowdown
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
+from app.ollama import OllamaError, ollama_client
 from app.policy import evaluate_policy
 from app.release_inputs import validate_release_inputs
 from app.release_candidate import build_release_candidate_manifest
@@ -35,7 +45,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -85,7 +95,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Read-only Pilot",
+        "release": "Evidence Chat",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -292,6 +302,122 @@ async def policy_evaluate(
     )
     decision["audit"] = record_access_decision(settings.evidence_db_path, decision)
     return {"version": VERSION, "decision": decision}
+
+
+class ChatRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=2000)
+
+
+@app.post("/api/v0/chat")
+async def readonly_chat(
+    request: ChatRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("use_readonly_chat", role)
+    if not decision["allowed"]:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "chat_role_denied", "reason": decision["reason"]},
+        )
+    normalized_role = decision["role"]
+    question = redact(request.question.strip())
+    context = build_chat_context(
+        settings.evidence_db_path,
+        trend_limit=30,
+        freshness_warning_seconds=settings.evidence_freshness_warning_seconds,
+    )
+    if not context:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "insufficient_evidence", "message": "Refresh the dashboard first."},
+        )
+
+    evidence_record_id = context["evidence_record"]["id"]
+    if is_prohibited(question):
+        answer = (
+            "I cannot perform or assist with exchange write actions. I can only "
+            "explain retained read-only evidence and suggest human investigation. "
+            "No action executed by bitAgent."
+        )
+        audit = record_chat(
+            settings.evidence_db_path,
+            role=normalized_role,
+            model="policy-refusal",
+            question=question,
+            answer=answer,
+            evidence_record_id=evidence_record_id,
+            success=True,
+            error_code="prohibited_action_refused",
+        )
+        return {
+            "version": VERSION,
+            "answer": answer,
+            "citations": citations(context),
+            "confidence": "policy_certain",
+            "limitations": context["investigation"].get("limitations", []),
+            "model": "policy-refusal",
+            "audit": audit,
+            "action_executed": False,
+        }
+
+    try:
+        generated = await ollama_client.generate(build_prompt(question, context))
+    except OllamaError as exc:
+        record_chat(
+            settings.evidence_db_path,
+            role=normalized_role,
+            model=settings.ollama_model,
+            question=question,
+            answer="",
+            evidence_record_id=evidence_record_id,
+            success=False,
+            error_code="ollama_unavailable",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "chat_unavailable", "message": str(exc)},
+        ) from exc
+
+    answer = redact(generated["answer"])
+    if "No action executed by bitAgent." not in answer:
+        answer = f"{answer}\n\nNo action executed by bitAgent."
+    audit = record_chat(
+        settings.evidence_db_path,
+        role=normalized_role,
+        model=generated["model"],
+        question=question,
+        answer=answer,
+        evidence_record_id=evidence_record_id,
+        success=True,
+    )
+    return {
+        "version": VERSION,
+        "answer": answer,
+        "citations": citations(context),
+        "confidence": context["investigation"].get("confidence", "insufficient"),
+        "limitations": context["investigation"].get("limitations", []),
+        "model": generated["model"],
+        "usage": {
+            "prompt_tokens": generated["prompt_tokens"],
+            "response_tokens": generated["response_tokens"],
+        },
+        "audit": audit,
+        "action_executed": False,
+    }
+
+
+@app.get("/api/v0/audit/chat/recent")
+async def chat_audit_recent(
+    limit: int = Query(default=50, ge=1, le=500),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("view_chat_audit", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "chat_audit_role_denied"})
+    return {
+        "version": VERSION,
+        "items": recent_chat_audit(settings.evidence_db_path, limit),
+    }
 
 
 @app.get("/api/v0/audit/access/recent")

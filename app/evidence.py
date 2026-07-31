@@ -61,6 +61,22 @@ def _connect(path: str) -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            role TEXT NOT NULL,
+            model TEXT NOT NULL,
+            question_text TEXT NOT NULL,
+            answer_text TEXT NOT NULL,
+            evidence_record_id INTEGER,
+            success INTEGER NOT NULL,
+            error_code TEXT,
+            audit_hash TEXT NOT NULL UNIQUE
+        )
+        """
+    )
     return connection
 
 
@@ -329,6 +345,76 @@ def recent_access_decisions(path: str, limit: int) -> list[dict]:
         }
         for row in rows
         ]
+
+
+def record_chat(
+    path: str,
+    *,
+    role: str,
+    model: str,
+    question: str,
+    answer: str,
+    evidence_record_id: int | None,
+    success: bool,
+    error_code: str | None = None,
+) -> dict:
+    created_at = datetime.now(UTC).isoformat()
+    safe_question = question[:2000]
+    safe_answer = answer[:12000]
+    material = _canonical(
+        {
+            "created_at": created_at,
+            "role": role,
+            "model": model,
+            "question": safe_question,
+            "answer": safe_answer,
+            "evidence_record_id": evidence_record_id,
+            "success": success,
+            "error_code": error_code,
+        }
+    )
+    audit_hash = hashlib.sha256(material.encode()).hexdigest()
+    with _connect(path) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO chat_audit (
+                created_at, role, model, question_text, answer_text,
+                evidence_record_id, success, error_code, audit_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                created_at,
+                role,
+                model,
+                safe_question,
+                safe_answer,
+                evidence_record_id,
+                int(success),
+                error_code,
+                audit_hash,
+            ),
+        )
+    return {
+        "id": cursor.lastrowid,
+        "created_at": created_at,
+        "audit_hash": audit_hash,
+    }
+
+
+def recent_chat_audit(path: str, limit: int) -> list[dict]:
+    with _connect(path) as connection:
+        rows = connection.execute(
+            """
+            SELECT id, created_at, role, model, evidence_record_id, success,
+                   error_code, audit_hash
+            FROM chat_audit ORDER BY id DESC LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [
+        {**dict(row), "success": bool(row["success"])}
+        for row in rows
+    ]
 
 
 def backup_and_verify(source_path: str, backup_path: str) -> dict:

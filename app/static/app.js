@@ -21,6 +21,50 @@ async function json(url) {
   return response.json();
 }
 
+function appendChat(kind, text) {
+  const node = document.createElement("div");
+  node.className = `chat-message ${kind}`;
+  node.textContent = text;
+  $("chat-messages").appendChild(node);
+  node.scrollIntoView({behavior: "smooth", block: "nearest"});
+}
+
+async function askChat(event) {
+  event.preventDefault();
+  const input = $("chat-question");
+  const question = input.value.trim();
+  if (!question) return;
+  appendChat("user", question);
+  input.value = "";
+  $("chat-send").disabled = true;
+  $("chat-state").textContent = "thinking";
+  try {
+    const response = await fetch("/api/v0/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-BitAgent-Role": "operator"
+      },
+      body: JSON.stringify({question})
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.detail?.message || body.detail?.code || `Chat failed (${response.status})`);
+    }
+    appendChat("assistant", body.answer);
+    $("chat-meta").textContent = `${body.model} · ${body.confidence} confidence · ${body.citations.length} citations · audit ${body.audit.id}`;
+    $("chat-state").textContent = "read only";
+    $("chat-state").className = "pill good";
+  } catch (error) {
+    appendChat("assistant error", error.message);
+    $("chat-state").textContent = "unavailable";
+    $("chat-state").className = "pill warn";
+  } finally {
+    $("chat-send").disabled = false;
+    input.focus();
+  }
+}
+
 function setMode(status) {
   $("version").textContent = status.version;
   $("mode-pill").textContent = `${status.mode} mode`;
@@ -201,4 +245,5 @@ $("refresh").addEventListener("click", load);
 $("refresh-live").addEventListener("click", load);
 $("feedback-useful").addEventListener("click", () => submitFeedback("useful").catch(error => $("feedback-status").textContent = error.message));
 $("feedback-correction").addEventListener("click", () => submitFeedback("needs_correction").catch(error => $("feedback-status").textContent = error.message));
+$("chat-form").addEventListener("submit", askChat);
 load();
