@@ -14,6 +14,7 @@ from app.briefs import daily_executive_brief
 from app.chat import (
     build_chat_context,
     build_prompt,
+    answer_quality,
     citations,
     deterministic_answer,
     chat_rate_limiter,
@@ -51,7 +52,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.16"
+VERSION = "1.1.17"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -368,6 +369,8 @@ async def readonly_chat(
             "explain retained read-only evidence and suggest human investigation. "
             "No action executed by bitAgent."
         )
+        evidence_citations = citations(context)
+        quality = answer_quality(answer, evidence_citations)
         audit = record_chat(
             settings.evidence_db_path,
             role=normalized_role,
@@ -385,7 +388,8 @@ async def readonly_chat(
             "answer_type": "policy_refusal",
             "category": "safety",
             "answer": answer,
-            "citations": citations(context),
+            "citations": evidence_citations,
+            "quality": quality,
             "confidence": "policy_certain",
             "limitations": context["investigation"].get("limitations", []),
             "model": "policy-refusal",
@@ -400,6 +404,8 @@ async def readonly_chat(
             f"{deterministic['answer']}\n\nNo action executed by bitAgent."
         )
         model = "deterministic-evidence-v1"
+        evidence_citations = citations(context)
+        quality = answer_quality(answer, evidence_citations)
         audit = record_chat(
             settings.evidence_db_path,
             role=normalized_role,
@@ -416,7 +422,8 @@ async def readonly_chat(
             "answer_type": "deterministic",
             "category": intent_category(deterministic["intent"]),
             "answer": answer,
-            "citations": citations(context),
+            "citations": evidence_citations,
+            "quality": quality,
             "confidence": deterministic["confidence"],
             "limitations": context["investigation"].get("limitations", []),
             "model": model,
@@ -454,6 +461,13 @@ async def readonly_chat(
     answer = redact(generated["answer"])
     if "No action executed by bitAgent." not in answer:
         answer = f"{answer}\n\nNo action executed by bitAgent."
+    evidence_citations = citations(context)
+    quality = answer_quality(answer, evidence_citations)
+    if not quality["passed"]:
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "chat_quality_gate_failed", "checks": quality["checks"]},
+        )
     audit = record_chat(
         settings.evidence_db_path,
         role=normalized_role,
@@ -470,7 +484,8 @@ async def readonly_chat(
         "answer_type": "llm",
         "category": "open_ended",
         "answer": answer,
-        "citations": citations(context),
+        "citations": evidence_citations,
+        "quality": quality,
         "confidence": context["investigation"].get("confidence", "insufficient"),
         "limitations": context["investigation"].get("limitations", []),
         "model": generated["model"],

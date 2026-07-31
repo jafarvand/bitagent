@@ -331,3 +331,16 @@ def citations(context: dict) -> list[dict]:
             "evidence_hash": record["hash"],
         },
     ]
+
+
+def answer_quality(answer: str, evidence_citations: list[dict]) -> dict:
+    checks = {
+        "non_empty": bool(answer.strip()),
+        "bounded_length": len(answer) <= 12000,
+        "non_execution_statement": "No action executed by bitAgent." in answer,
+        "has_citations": bool(evidence_citations),
+        "credentials_redacted": not any(
+            pattern.search(answer) for pattern in SECRET_PATTERNS
+        ),
+    }
+    return {"passed": all(checks.values()), "checks": checks}

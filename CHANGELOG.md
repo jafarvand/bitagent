@@ -2,6 +2,10 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.17] - 2026-07-31
+
+- Added fail-closed chat answer quality gates and per-check response metadata.
+
 ## [1.1.16] - 2026-07-31
 
 - Added a configurable evidence-context budget with deterministic compaction.

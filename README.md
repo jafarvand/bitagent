@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.16 — Bounded Context**
+Current release: **1.1.17 — Answer Quality Gates**
 
 ## What version 0 shows
 
@@ -159,6 +159,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.14 | Normalized questions and control-character rejection | Current |
 | 1.1.15 | Per-role/session in-memory chat rate limiting | Current |
 | 1.1.16 | Bounded and compacted Ollama evidence context | Current |
+| 1.1.17 | Non-empty, bounded, cited, redacted, non-executing answer gates | Current |
 
 ## Project documents
 
