@@ -17,6 +17,7 @@ from app.chat import (
     citations,
     deterministic_answer,
     is_prohibited,
+    intent_category,
     redact,
 )
 from app.exchange import ExchangeAPIError, exchange_client
@@ -49,7 +50,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.7"
+VERSION = "1.1.8"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -360,6 +361,7 @@ async def readonly_chat(
             "version": VERSION,
             "session_id": session_id,
             "answer_type": "policy_refusal",
+            "category": "safety",
             "answer": answer,
             "citations": citations(context),
             "confidence": "policy_certain",
@@ -390,6 +392,7 @@ async def readonly_chat(
             "version": VERSION,
             "session_id": session_id,
             "answer_type": "deterministic",
+            "category": intent_category(deterministic["intent"]),
             "answer": answer,
             "citations": citations(context),
             "confidence": deterministic["confidence"],
@@ -437,6 +440,7 @@ async def readonly_chat(
         "version": VERSION,
         "session_id": session_id,
         "answer_type": "llm",
+        "category": "open_ended",
         "answer": answer,
         "citations": citations(context),
         "confidence": context["investigation"].get("confidence", "insufficient"),

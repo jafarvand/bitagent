@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.7 — Session Audit**
+Current release: **1.1.8 — Question Categories**
 
 ## What version 0 shows
 
@@ -150,6 +150,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.5 | UUID chat sessions persisted with every audit record | Current |
 | 1.1.6 | Bounded role-filtered chat session history | Current |
 | 1.1.7 | Auditor-only content-free session audit receipts | Current |
+| 1.1.8 | Stable operations, market, quality, safety, and open-ended categories | Current |
 
 ## Project documents
 

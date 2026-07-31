@@ -103,6 +103,20 @@ def deterministic_answer(question: str, context: dict) -> dict | None:
     return None
 
 
+def intent_category(intent: str) -> str:
+    if intent in {
+        "pending_withdrawal_count",
+        "withdrawal_incident_severity",
+        "operations_freshness",
+    }:
+        return "operations"
+    if intent == "market_symbol":
+        return "market"
+    if intent == "root_cause_boundary":
+        return "evidence_quality"
+    return "general"
+
+
 def build_chat_context(
     path: str,
     *,
