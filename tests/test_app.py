@@ -1,10 +1,13 @@
+import asyncio
 import hashlib
 import hmac
 import json
 from copy import deepcopy
 
 import pytest
+import httpx
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from app.config import settings
 from app.chat import build_prompt
@@ -12,6 +15,7 @@ from app.exchange import ExchangeClient
 from app.evidence import backup_and_verify, record_dashboard
 from app.main import app
 from app.market_risk import analyze_market_range
+from app.ollama import OllamaClient
 from app.release_inputs import validate_release_inputs
 from app.release_candidate import build_release_candidate_manifest
 
@@ -34,7 +38,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.1.0"
+    assert response.json()["version"] == "1.1.1"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -183,7 +187,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.1.0",
+        "version": "1.1.1",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -296,6 +300,47 @@ def test_chat_prompt_labels_question_as_untrusted():
     assert "Use only the EVIDENCE JSON" in prompt
 
 
+def test_ollama_contract_discovers_qwen_tag_and_generates_with_basic_auth(
+    monkeypatch,
+):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.headers["Authorization"].startswith("Basic ")
+        if request.url.path == "/api/tags":
+            return httpx.Response(
+                200,
+                json={"models": [{"name": "qwen3:8b"}, {"name": "other:latest"}]},
+            )
+        assert request.url.path == "/api/generate"
+        payload = json.loads(request.content)
+        assert payload["model"] == "qwen3:8b"
+        assert payload["stream"] is False
+        return httpx.Response(
+            200,
+            json={
+                "model": "qwen3:8b",
+                "response": "Grounded answer",
+                "done": True,
+                "prompt_eval_count": 10,
+                "eval_count": 4,
+            },
+        )
+
+    monkeypatch.setattr(settings, "bitagent_chat_enabled", True)
+    monkeypatch.setattr(settings, "ollama_username", "service-user")
+    monkeypatch.setattr(settings, "ollama_password", SecretStr("test-password"))
+    monkeypatch.setattr(settings, "ollama_model", "qwen")
+    ollama = OllamaClient(transport=httpx.MockTransport(handler))
+
+    result = asyncio.run(ollama.generate("Evidence prompt"))
+
+    assert result["model"] == "qwen3:8b"
+    assert result["answer"] == "Grounded answer"
+    assert [request.url.path for request in requests] == ["/api/tags", "/api/generate"]
+
+
 def test_enforced_rbac_denies_anonymous_and_allows_viewer(monkeypatch):
     monkeypatch.setattr(settings, "bitagent_access_control_mode", "enforced")
 
@@ -344,7 +389,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.1.0"
+    assert report["version"] == "1.1.1"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -439,7 +484,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.1.0"
+    assert manifest["current_version"] == "1.1.1"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

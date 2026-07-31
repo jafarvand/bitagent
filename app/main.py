@@ -45,7 +45,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -403,6 +403,29 @@ async def readonly_chat(
         },
         "audit": audit,
         "action_executed": False,
+    }
+
+
+@app.get("/api/v0/chat/models")
+async def chat_models(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("use_readonly_chat", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "chat_role_denied"})
+    try:
+        models = await ollama_client.models()
+        resolved = await ollama_client.resolve_model(models)
+    except OllamaError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "ollama_unavailable", "message": str(exc)},
+        ) from exc
+    return {
+        "version": VERSION,
+        "configured": settings.ollama_model,
+        "resolved": resolved,
+        "models": models,
     }
 
 

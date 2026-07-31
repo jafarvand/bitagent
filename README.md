@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.0 — Evidence Chat**
+Current release: **1.1.1 — Evidence Chat**
 
 ## What version 0 shows
 
@@ -93,6 +93,7 @@ uvicorn app.main:app --reload
 - `GET /api/v0/readiness`
 - `GET /api/v0/releases/candidate` (1.0 gate decision and evidence receipt)
 - `POST /api/v0/chat` (operator/admin; retained evidence only)
+- `GET /api/v0/chat/models` (authenticated Ollama model discovery)
 - `GET /api/v0/audit/chat/recent` (auditor/admin; metadata only)
 - `GET /api/v0/users/{user_id}/{resource}` where resource is one of
   `summary`, `balances`, `trades`, `deposits`, `withdrawals`, `pnl`
@@ -127,7 +128,8 @@ pytest
 | 0.9.3 | Validated owner incident, security, identity and UAT inputs | Complete |
 | 0.10.0 | Fail-closed 1.0 candidate decision and evidence receipt | Complete |
 | 1.0.0 | Read-only pilot release; evidence gates remain fail-closed | Complete |
-| 1.1.0 | Ollama/Qwen read-only evidence chatbot with citations and audit | Current |
+| 1.1.0 | Ollama/Qwen read-only evidence chatbot with citations and audit | Complete |
+| 1.1.1 | Authenticated model discovery and exact Qwen tag resolution | Current |
 
 ## Project documents
 

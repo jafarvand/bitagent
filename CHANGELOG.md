@@ -2,6 +2,15 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.1] - 2026-07-31
+
+### Added
+
+- Authenticated Ollama `/api/tags` model discovery.
+- Safe resolution from a generic `qwen` selector to one installed Qwen tag.
+- Fail-closed errors for missing, unavailable, or ambiguous model names.
+- End-to-end Basic Auth, discovery, and generation contract test.
+
 ## [1.1.0] - 2026-07-31
 
 ### Added
