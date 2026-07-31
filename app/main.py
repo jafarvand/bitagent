@@ -14,6 +14,7 @@ from app.chat import (
     build_chat_context,
     build_prompt,
     citations,
+    deterministic_answer,
     is_prohibited,
     redact,
 )
@@ -45,7 +46,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -95,7 +96,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Evidence Chat",
+        "release": "Accurate Evidence Chat",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -356,6 +357,33 @@ async def readonly_chat(
             "confidence": "policy_certain",
             "limitations": context["investigation"].get("limitations", []),
             "model": "policy-refusal",
+            "audit": audit,
+            "action_executed": False,
+        }
+
+    deterministic = deterministic_answer(question, context)
+    if deterministic:
+        answer = (
+            f"{deterministic['answer']}\n\nNo action executed by bitAgent."
+        )
+        model = "deterministic-evidence-v1"
+        audit = record_chat(
+            settings.evidence_db_path,
+            role=normalized_role,
+            model=model,
+            question=question,
+            answer=answer,
+            evidence_record_id=evidence_record_id,
+            success=True,
+        )
+        return {
+            "version": VERSION,
+            "answer": answer,
+            "citations": citations(context),
+            "confidence": deterministic["confidence"],
+            "limitations": context["investigation"].get("limitations", []),
+            "model": model,
+            "intent": deterministic["intent"],
             "audit": audit,
             "action_executed": False,
         }

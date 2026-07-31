@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.1.1 — Evidence Chat**
+Current release: **1.1.3 — Accurate Evidence Chat**
 
 ## What version 0 shows
 
@@ -142,7 +142,8 @@ answers score zero and are never omitted from the overall result.
 | 1.0.0 | Read-only pilot release; evidence gates remain fail-closed | Complete |
 | 1.1.0 | Ollama/Qwen read-only evidence chatbot with citations and audit | Complete |
 | 1.1.1 | Authenticated model discovery and exact Qwen tag resolution | Complete |
-| 1.1.2 | Timestamped chatbot question, latency and accuracy evaluation | Current |
+| 1.1.2 | Timestamped chatbot question, latency and accuracy evaluation | Complete |
+| 1.1.3 | Deterministic authoritative answers; acceptance accuracy 100% | Current |
 
 ## Project documents
 

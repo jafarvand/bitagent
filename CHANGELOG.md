@@ -2,6 +2,15 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.1.3] - 2026-07-31
+
+### Added
+
+- Deterministic intent routing for pending counts, incident severity, market,
+  source freshness, and root-cause evidence boundaries.
+- Authoritative answers generated directly from the latest retained evidence.
+- Six-question live acceptance accuracy improved from 16.67% to 100%.
+
 ## [1.1.2] - 2026-07-31
 
 ### Added

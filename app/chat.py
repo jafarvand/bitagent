@@ -35,6 +35,74 @@ def is_prohibited(question: str) -> bool:
     return any(phrase in normalized for phrase in PROHIBITED_REQUESTS)
 
 
+def deterministic_answer(question: str, context: dict) -> dict | None:
+    """Answer authoritative facts directly from retained evidence."""
+    normalized = " ".join(question.lower().split())
+    operations = context["operations"]
+    operation_data = operations.get("data", {})
+    operation_meta = operations.get("meta", {})
+    incident = context["incident"]
+    market = context["market"].get("data", {})
+
+    if "root cause" in normalized or (
+        "prove" in normalized and ("warning" in normalized or "incident" in normalized)
+    ):
+        return {
+            "intent": "root_cause_boundary",
+            "answer": (
+                "The current evidence cannot prove the root cause. Pending counts "
+                "are available, but queue depth, worker health, network status, and "
+                "transaction-age evidence are unavailable. A human operator should "
+                "check those approved operational systems."
+            ),
+            "confidence": "limited",
+        }
+    if "fresh" in normalized or "stale" in normalized:
+        freshness = operation_meta.get("data_freshness_seconds")
+        value = f"{freshness} seconds" if freshness is not None else "unknown"
+        return {
+            "intent": "operations_freshness",
+            "answer": (
+                f"The latest operations source reports freshness of {value}. "
+                f"Its source timestamp is {operation_meta.get('generated_at') or 'unknown'}."
+            ),
+            "confidence": "high" if freshness is not None else "insufficient",
+        }
+    if "pending" in normalized and (
+        "withdraw" in normalized or "how many" in normalized or "count" in normalized
+    ):
+        pending = operation_data.get("pending_withdrawals")
+        return {
+            "intent": "pending_withdrawal_count",
+            "answer": (
+                f"The latest retained evidence reports {pending} pending withdrawals."
+            ),
+            "confidence": "high",
+        }
+    if "severity" in normalized and (
+        "withdraw" in normalized or "incident" in normalized
+    ):
+        return {
+            "intent": "withdrawal_incident_severity",
+            "answer": (
+                f"The current withdrawal incident severity is {incident['severity']} "
+                f"under rule {incident['rule']['id']}@{incident['rule']['version']}."
+            ),
+            "confidence": "high",
+        }
+    if "market" in normalized and (
+        "which" in normalized or "symbol" in normalized or "represented" in normalized
+    ):
+        return {
+            "intent": "market_symbol",
+            "answer": (
+                f"The latest retained market evidence represents {market.get('market')}."
+            ),
+            "confidence": "high",
+        }
+    return None
+
+
 def build_chat_context(
     path: str,
     *,
