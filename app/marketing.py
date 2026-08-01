@@ -94,6 +94,64 @@ class RetentionPlanRequest(BaseModel):
     owner: str = Field(min_length=2, max_length=100)
 
 
+class ContentStudioRequest(BaseModel):
+    campaign_id: str = Field(min_length=3, max_length=100)
+    product: str = Field(min_length=2, max_length=120)
+    audience: str = Field(min_length=3, max_length=200)
+    channels: list[Literal["email", "social", "content", "partner", "referral", "paid"]] = Field(
+        min_length=1, max_length=6
+    )
+    value_proposition: str = Field(min_length=3, max_length=500)
+    cta: str = Field(min_length=2, max_length=120)
+    claims: list[str] = Field(default_factory=list, max_length=20)
+    claim_sources: list[str] = Field(default_factory=list, max_length=20)
+    language: str = Field(default="en", min_length=2, max_length=12)
+    native_speaker_approved: bool = False
+    scheduled_for: datetime
+    approval_due_at: datetime
+
+
+def build_content_studio(path: str, request: ContentStudioRequest) -> dict:
+    artifact_id = str(uuid4())
+    prohibited_terms = ("guaranteed profit", "risk-free", "act now or lose", "secret strategy")
+    combined_claims = " ".join(request.claims).lower()
+    checks = {
+        "brand": not any(term in combined_claims for term in prohibited_terms),
+        "claims_substantiated": not request.claims or bool(request.claim_sources),
+        "privacy": "sensitive trait" not in request.audience.lower(),
+        "localization": request.language == "en" or request.native_speaker_approved,
+        "calendar_dependency": request.approval_due_at < request.scheduled_for,
+    }
+    passed = all(checks.values())
+    variants = []
+    for channel in request.channels:
+        variants.extend(
+            {
+                "channel": channel,
+                "variant": label,
+                "copy": f"{request.value_proposition} {request.cta}",
+                "status": "draft" if passed else "blocked",
+            }
+            for label in ("A", "B")
+        )
+    artifact = {
+        "id": artifact_id,
+        **request.model_dump(mode="json"),
+        "variants": variants,
+        "validation": {"passed": passed, "checks": checks},
+        "calendar": {
+            "approval_due_at": request.approval_due_at.isoformat(),
+            "scheduled_for": request.scheduled_for.isoformat(),
+            "dependencies_satisfied": checks["calendar_dependency"],
+        },
+        "status": "draft" if passed else "blocked",
+        "approval_required": True,
+        "publish_enabled": False,
+    }
+    artifact["audit"] = record_event(path, "content_artifact_created", artifact_id, artifact)
+    return artifact
+
+
 def build_acquisition_plan(path: str, request: AcquisitionPlanRequest) -> dict:
     plan_id = str(uuid4())
     registrations = round(

@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.9.3] - 2026-08-01
+
+- Added governed multi-channel content variants and campaign calendar dependencies.
+- Added deterministic brand, privacy, claim-source, and localization checks.
+- Added fail-closed blocking for invalid content while publishing remains disabled.
+
 ## [1.9.2] - 2026-08-01
 
 - Added lifecycle-aware onboarding, adoption, retention, and re-engagement plans.

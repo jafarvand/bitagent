@@ -41,7 +41,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.9.2"
+    assert response.json()["version"] == "1.9.3"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -71,7 +71,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "1.9.2"
+    assert body["version"] == "1.9.3"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -205,7 +205,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.9.2",
+        "version": "1.9.3",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -738,7 +738,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.9.2"
+    assert report["version"] == "1.9.3"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -833,7 +833,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.9.2"
+    assert manifest["current_version"] == "1.9.3"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1098,3 +1098,62 @@ def test_retention_planner_fails_closed_for_suppressed_or_frequency_capped_cohor
     assert plan["eligibility"]["checks"]["not_suppressed"] is False
     assert plan["eligibility"]["checks"]["within_frequency_cap"] is False
     assert plan["eligibility"]["fail_closed"] is True
+
+
+def test_content_studio_creates_checked_variants_and_calendar():
+    response = client.post(
+        "/api/v0/marketing/content",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "campaign_id": "campaign-123",
+            "product": "bitAgent",
+            "audience": "consented operations leaders",
+            "channels": ["email", "social"],
+            "value_proposition": "Review evidence-backed operations insights.",
+            "cta": "Read the approved guide.",
+            "claims": ["All recommendations cite retained evidence."],
+            "claim_sources": ["bitAgent product contract v1.9"],
+            "language": "en",
+            "scheduled_for": "2026-08-10T12:00:00Z",
+            "approval_due_at": "2026-08-09T12:00:00Z",
+        },
+    )
+
+    artifact = response.json()["artifact"]
+    assert artifact["validation"]["passed"] is True
+    assert len(artifact["variants"]) == 4
+    assert artifact["calendar"]["dependencies_satisfied"] is True
+    assert artifact["publish_enabled"] is False
+    assert all(item["status"] == "draft" for item in artifact["variants"])
+
+
+def test_content_studio_blocks_unsubstantiated_and_prohibited_claims():
+    response = client.post(
+        "/api/v0/marketing/content",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "campaign_id": "campaign-unsafe",
+            "product": "bitAgent",
+            "audience": "consented prospects",
+            "channels": ["paid"],
+            "value_proposition": "Guaranteed profit and risk-free growth.",
+            "cta": "Act now.",
+            "claims": ["Guaranteed profit", "Risk-free"],
+            "claim_sources": [],
+            "language": "fr",
+            "native_speaker_approved": False,
+            "scheduled_for": "2026-08-10T12:00:00Z",
+            "approval_due_at": "2026-08-11T12:00:00Z",
+        },
+    )
+
+    artifact = response.json()["artifact"]
+    assert artifact["status"] == "blocked"
+    assert artifact["validation"]["checks"] == {
+        "brand": False,
+        "claims_substantiated": False,
+        "privacy": True,
+        "localization": False,
+        "calendar_dependency": False,
+    }
+    assert artifact["publish_enabled"] is False
