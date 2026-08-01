@@ -2,6 +2,13 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.9.0] - 2026-08-01
+
+- Added marketing governance and permitted/prohibited data boundaries.
+- Added canonical lifecycle stages and aggregate marketing event taxonomy.
+- Added validated campaign planning with evidence, stop conditions, and disabled execution.
+- Added append-only hashed marketing planning audit records and role-gated APIs.
+
 ## [1.1.22] - 2026-07-31
 
 - Added deterministic prompt-injection detection, refusal, and audit receipts.

@@ -44,6 +44,14 @@ from app.features import FEATURES
 from app.incidents import detect_withdrawal_slowdown
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
+from app.marketing import (
+    CampaignPlanRequest,
+    EVENT_TAXONOMY,
+    GOVERNANCE,
+    LIFECYCLE_STAGES,
+    audit_events,
+    create_plan,
+)
 from app.ollama import OllamaError, ollama_client
 from app.policy import evaluate_policy
 from app.release_inputs import validate_release_inputs
@@ -55,13 +63,13 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.1.22"
+VERSION = "1.9.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
     title="bitAgent",
     version=VERSION,
-    description="Read-only replay, security and UAT readiness tooling.",
+    description="Governed exchange operations and marketing planning tooling.",
 )
 app.mount(
     "/.well-known/acme-challenge",
@@ -105,7 +113,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Accurate Evidence Chat",
+        "release": "Marketing Governance Foundation",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -122,6 +130,42 @@ async def status():
             "basic_auth_configured": bool(ollama_username and ollama_password),
         },
     }
+
+
+@app.get("/api/v0/marketing/foundation")
+async def marketing_foundation(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_marketing", role)
+    return {
+        "version": VERSION,
+        "governance": GOVERNANCE,
+        "lifecycle_stages": LIFECYCLE_STAGES,
+        "event_taxonomy": EVENT_TAXONOMY,
+        "action_executed": False,
+    }
+
+
+@app.post("/api/v0/marketing/plans", status_code=201)
+async def marketing_plan(
+    request: CampaignPlanRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("create_marketing_plan", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "marketing_role_denied"})
+    return {"version": VERSION, "plan": create_plan(settings.evidence_db_path, request)}
+
+
+@app.get("/api/v0/marketing/audit")
+async def marketing_audit(
+    limit: int = Query(default=50, ge=1, le=500),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("view_marketing_audit", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "marketing_audit_role_denied"})
+    return {"version": VERSION, "items": audit_events(settings.evidence_db_path, limit)}
 
 
 @app.get("/api/v0/features")
