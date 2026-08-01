@@ -2,7 +2,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 
 class ServiceMetric(BaseModel):
@@ -28,7 +28,7 @@ class WorkerMetric(BaseModel):
 
 class OperationsAnalysisRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
-    observed_at: datetime
+    observed_at: AwareDatetime
     evidence_refs: list[str] = Field(min_length=1, max_length=100)
     owner: str = Field(min_length=2, max_length=100)
     evidence_fresh: bool

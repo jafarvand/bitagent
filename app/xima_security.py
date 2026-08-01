@@ -2,7 +2,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 
 class SecurityEvent(BaseModel):
@@ -11,7 +11,7 @@ class SecurityEvent(BaseModel):
     action: str = Field(min_length=2, max_length=100)
     outcome: Literal["success", "failure", "blocked", "unknown"]
     source_severity: Literal["info", "low", "medium", "high", "critical"]
-    occurred_at: datetime
+    occurred_at: AwareDatetime
     opaque_actor_id: str = Field(min_length=3, max_length=100)
     target: str = Field(min_length=2, max_length=100)
     source_classification: str = Field(min_length=2, max_length=100)
@@ -24,7 +24,7 @@ class SecurityEvent(BaseModel):
 
 class SecurityAnalysisRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
-    observed_at: datetime
+    observed_at: AwareDatetime
     evidence_refs: list[str] = Field(min_length=1, max_length=100)
     owner: str = Field(min_length=2, max_length=100)
     evidence_fresh: bool

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 
 class RiskFactor(BaseModel):
@@ -29,7 +29,7 @@ class TransactionRiskEvidence(BaseModel):
     asset: str = Field(pattern=r"^[A-Z0-9]{2,20}$")
     amount_bucket: str = Field(min_length=1, max_length=100)
     risk_indicators: list[str] = Field(default_factory=list, max_length=50)
-    observed_at: datetime
+    observed_at: AwareDatetime
 
 
 class AMLCase(BaseModel):
@@ -44,7 +44,7 @@ class AMLCase(BaseModel):
 
 class AMLAnalysisRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
-    observed_at: datetime
+    observed_at: AwareDatetime
     evidence_refs: list[str] = Field(min_length=1, max_length=100)
     owner: str = Field(min_length=2, max_length=100)
     evidence_fresh: bool

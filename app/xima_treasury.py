@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 
 class AssetPosition(BaseModel):
@@ -26,7 +26,7 @@ class Obligation(BaseModel):
     obligation_id: str = Field(min_length=2, max_length=100)
     asset: str = Field(pattern=r"^[A-Z0-9]{2,20}$")
     amount: Decimal = Field(gt=0)
-    due_at: datetime
+    due_at: AwareDatetime
     status: Literal["open", "in_progress", "resolved"]
     owner: str = Field(min_length=2, max_length=100)
 
@@ -42,7 +42,7 @@ class ReconciliationPosition(BaseModel):
 
 class TreasuryAnalysisRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
-    observed_at: datetime
+    observed_at: AwareDatetime
     evidence_refs: list[str] = Field(min_length=1, max_length=100)
     owner: str = Field(min_length=2, max_length=100)
     evidence_fresh: bool

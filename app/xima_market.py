@@ -2,7 +2,7 @@ import math
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 
 class BookLevel(BaseModel):
@@ -20,7 +20,7 @@ class ExposureMetric(BaseModel):
 class MarketRiskRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
     market: str = Field(pattern=r"^[A-Z0-9]+_[A-Z0-9]+$")
-    observed_at: datetime
+    observed_at: AwareDatetime
     evidence_refs: list[str] = Field(min_length=1, max_length=100)
     owner: str = Field(min_length=2, max_length=100)
     evidence_fresh: bool

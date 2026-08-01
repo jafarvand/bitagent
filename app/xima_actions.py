@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 
 SandboxAction = Literal["route_test_case", "create_draft_task", "send_test_notification"]
@@ -32,7 +32,7 @@ class ActionAuthorizationRequest(BaseModel):
     preview_id: str = Field(min_length=3, max_length=100)
     maker: str = Field(min_length=2, max_length=100)
     checker: str = Field(min_length=2, max_length=100)
-    expires_at: datetime
+    expires_at: AwareDatetime
 
     @model_validator(mode="after")
     def validate_approval(self):

@@ -101,6 +101,14 @@ uvicorn app.main:app --reload
 - `GET /api/v0/audit/chat/sessions/{session_id}` (content-free session receipts)
 - `GET /api/v0/users/{user_id}/{resource}` where resource is one of
   `summary`, `balances`, `trades`, `deposits`, `withdrawals`, `pnl`
+- `/api/v0/xima/evidence*` for normalized ingestion, source health, replay, and audit
+- `/api/v0/xima/agents/*` for operations, market/risk, treasury, AML/fraud,
+  security, support, and executive intelligence
+- `/api/v0/xima/knowledge/*` for governed document ingestion and retrieval
+- `/api/v0/xima/governance/*` for policy, registry, and evaluation gates
+- `/api/v0/xima/pilot/shadow/evaluate` for measured shadow readiness
+- `/api/v0/xima/actions/*` for the local low-risk controlled-action sandbox
+- `GET /api/v0/xima/integrations/exchange/health` for safe gateway telemetry
 - `GET /health`
 
 The user-resource proxy is disabled in the UI by default because it can expose
@@ -194,6 +202,8 @@ answers score zero and are never omitted from the overall result.
 - [Marketing Growth Agent plan and infographic](docs/planning/marketing-growth-agent.md)
 - [Remaining XIMA version roadmap](docs/planning/xima-version-roadmap.md)
 - [Detailed exchange-side API and platform requirements](docs/integration/exchange-side-requirements.md)
+- [XIMA software completion and external-gate matrix](docs/releases/xima-completion-matrix.md)
+- [Platform security and operations baseline](docs/security/platform-baseline.md)
 - [Master operations runbook](docs/runbooks/master-runbook.md)
 - [Architecture](docs/architecture/version-0.md)
 - [API contract and Postman collection](docs/api/)

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 
 class KnowledgeDocumentRequest(BaseModel):
@@ -19,8 +19,8 @@ class KnowledgeDocumentRequest(BaseModel):
     owner: str = Field(min_length=2, max_length=100)
     approval_status: Literal["draft", "approved", "rejected", "superseded"]
     approved_by_role: str | None = Field(default=None, max_length=100)
-    effective_at: datetime
-    expires_at: datetime
+    effective_at: AwareDatetime
+    expires_at: AwareDatetime
     data_class: Literal["public", "internal", "confidential"]
     allowed_roles: list[Literal["viewer", "operator", "auditor", "admin"]] = Field(
         min_length=1, max_length=4
@@ -41,7 +41,7 @@ class KnowledgeDocumentRequest(BaseModel):
 class SupportTicketRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
     ticket_id: str = Field(min_length=3, max_length=100)
-    observed_at: datetime
+    observed_at: AwareDatetime
     evidence_refs: list[str] = Field(min_length=1, max_length=100)
     owner: str = Field(min_length=2, max_length=100)
     evidence_fresh: bool

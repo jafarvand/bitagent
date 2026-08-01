@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 
 class ShadowOutcome(BaseModel):
@@ -30,8 +30,8 @@ class ReliabilityEvidence(BaseModel):
 
 class ShadowPilotRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
-    window_start: datetime
-    window_end: datetime
+    window_start: AwareDatetime
+    window_end: AwareDatetime
     evidence_refs: list[str] = Field(min_length=1, max_length=100)
     owner: str = Field(min_length=2, max_length=100)
     outcomes: list[ShadowOutcome] = Field(min_length=1, max_length=100000)

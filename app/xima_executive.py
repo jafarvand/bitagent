@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 
 class DomainSummary(BaseModel):
@@ -11,7 +11,7 @@ class DomainSummary(BaseModel):
     ]
     status: Literal["ready", "blocked", "degraded"]
     severity: Literal["healthy", "normal", "low", "medium", "warning", "high", "critical", "unknown"]
-    observed_at: datetime
+    observed_at: AwareDatetime
     evidence_refs: list[str] = Field(min_length=1, max_length=100)
     owner: str = Field(min_length=2, max_length=100)
     headline: str = Field(min_length=3, max_length=500)

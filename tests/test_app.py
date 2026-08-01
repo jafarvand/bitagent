@@ -2419,3 +2419,21 @@ def test_exchange_integration_health_endpoint_is_credential_free():
     assert health["read_only_methods"] == ["GET"]
     assert health["credentials_exposed"] is False
     assert "secret" not in str(health).lower()
+
+
+def test_xima_domain_contracts_reject_timezone_naive_evidence_timestamps():
+    response = client.post(
+        "/api/v0/xima/agents/operations/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": "2026-08-01T12:00:00",
+            "evidence_refs": ["ops-1"], "owner": "operations",
+            "evidence_fresh": True, "conflicting_fields": [],
+            "services": [{
+                "name": "api", "error_rate_percent": 0, "p95_latency_ms": 10,
+                "capacity_used_percent": 10, "dependencies_healthy": True,
+            }],
+        },
+    )
+
+    assert response.status_code == 422
