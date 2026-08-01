@@ -172,6 +172,7 @@ answers score zero and are never omitted from the overall result.
 
 - [MVP plan and task board](docs/planning/mvp-v0.md)
 - [Approved 16-week project plan](docs/planning/project-plan.md)
+- [Marketing Growth Agent plan and infographic](docs/planning/marketing-growth-agent.md)
 - [Master operations runbook](docs/runbooks/master-runbook.md)
 - [Architecture](docs/architecture/version-0.md)
 - [API contract and Postman collection](docs/api/)
