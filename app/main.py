@@ -324,12 +324,13 @@ async def pilot_cancel(
 
 @app.get("/api/v0/marketing/pilot/monitoring")
 async def pilot_monitor(
+    tenant_id: str = Query(min_length=1, max_length=100),
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     decision = authorize("manage_marketing_automation", role)
     if not decision["allowed"]:
         raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
-    return {"version": VERSION, **pilot_monitoring(settings.evidence_db_path)}
+    return {"version": VERSION, **pilot_monitoring(settings.evidence_db_path, tenant_id)}
 
 
 @app.get("/api/v0/marketing/audit")

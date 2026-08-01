@@ -147,32 +147,32 @@ answers score zero and are never omitted from the overall result.
 | 1.1.0 | Ollama/Qwen read-only evidence chatbot with citations and audit | Complete |
 | 1.1.1 | Authenticated model discovery and exact Qwen tag resolution | Complete |
 | 1.1.2 | Timestamped chatbot question, latency and accuracy evaluation | Complete |
-| 1.1.3 | Deterministic authoritative answers; acceptance accuracy 100% | Current |
-| 1.1.4 | Structured deterministic, refusal, and LLM response contract | Current |
-| 1.1.5 | UUID chat sessions persisted with every audit record | Current |
-| 1.1.6 | Bounded role-filtered chat session history | Current |
-| 1.1.7 | Auditor-only content-free session audit receipts | Current |
-| 1.1.8 | Stable operations, market, quality, safety, and open-ended categories | Current |
-| 1.1.9 | Deterministic pending-withdrawal trend answers | Current |
-| 1.1.10 | Deterministic executive brief and priority answers | Current |
-| 1.1.11 | Bounded deterministic market-range risk answers | Current |
-| 1.1.12 | Deterministic capability-gap answers from the feature registry | Current |
-| 1.1.13 | Fail-closed readiness boundary answers | Current |
-| 1.1.14 | Normalized questions and control-character rejection | Current |
-| 1.1.15 | Per-role/session in-memory chat rate limiting | Current |
-| 1.1.16 | Bounded and compacted Ollama evidence context | Current |
-| 1.1.17 | Non-empty, bounded, cited, redacted, non-executing answer gates | Current |
+| 1.1.3 | Deterministic authoritative answers; acceptance accuracy 100% | Complete |
+| 1.1.4 | Structured deterministic, refusal, and LLM response contract | Complete |
+| 1.1.5 | UUID chat sessions persisted with every audit record | Complete |
+| 1.1.6 | Bounded role-filtered chat session history | Complete |
+| 1.1.7 | Auditor-only content-free session audit receipts | Complete |
+| 1.1.8 | Stable operations, market, quality, safety, and open-ended categories | Complete |
+| 1.1.9 | Deterministic pending-withdrawal trend answers | Complete |
+| 1.1.10 | Deterministic executive brief and priority answers | Complete |
+| 1.1.11 | Bounded deterministic market-range risk answers | Complete |
+| 1.1.12 | Deterministic capability-gap answers from the feature registry | Complete |
+| 1.1.13 | Fail-closed readiness boundary answers | Complete |
+| 1.1.14 | Normalized questions and control-character rejection | Complete |
+| 1.1.15 | Per-role/session in-memory chat rate limiting | Complete |
+| 1.1.16 | Bounded and compacted Ollama evidence context | Complete |
+| 1.1.17 | Non-empty, bounded, cited, redacted, non-executing answer gates | Complete |
 | 1.1.18 | Required citation timestamps, record IDs, and evidence hashes | Complete |
 | 1.1.19 | Ten-case operational, safety, capability, and governance evaluation | Complete |
 | 1.1.20 | Safe chat dependency and evidence health reporting | Complete |
 | 1.1.21 | Bounded role-filtered session export with SHA-256 receipt | Complete |
-| 1.1.22 | Deterministic prompt-injection detection, refusal, and audit | Current |
-| 1.9.0 | Marketing data boundaries, lifecycle taxonomy, planning schema, and audit | Current |
-| 1.9.1 | Evidence-backed acquisition funnels, briefs, and KPI targets | Current |
-| 1.9.2 | Lifecycle retention, adoption, onboarding, and re-engagement plans | Current |
-| 1.9.3 | Multi-channel variants, compliance checks, and campaign calendar | Current |
-| 1.9.4 | Funnel reporting, attribution boundaries, experiments, and briefs | Current |
-| 1.9.5 | Exact approvals, test audiences, dry runs, rollback, and pause | Current |
+| 1.1.22 | Deterministic prompt-injection detection, refusal, and audit | Complete |
+| 1.9.0 | Marketing data boundaries, lifecycle taxonomy, planning schema, and audit | Complete |
+| 1.9.1 | Evidence-backed acquisition funnels, briefs, and KPI targets | Complete |
+| 1.9.2 | Lifecycle retention, adoption, onboarding, and re-engagement plans | Complete |
+| 1.9.3 | Multi-channel variants, compliance checks, and campaign calendar | Complete |
+| 1.9.4 | Funnel reporting, attribution boundaries, experiments, and briefs | Complete |
+| 1.9.5 | Exact approvals, test audiences, dry runs, rollback, and pause | Complete |
 | 1.10.0 | Limited controlled scheduling, cancellation, and monitoring | Current |
 
 ## Project documents

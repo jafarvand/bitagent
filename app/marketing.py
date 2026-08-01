@@ -171,6 +171,7 @@ class SandboxExecutionRequest(BaseModel):
 
 class PilotParameters(BaseModel):
     campaign_id: str = Field(min_length=3, max_length=100)
+    tenant_id: str = Field(min_length=1, max_length=100)
     audience_id: str = Field(pattern=r"^pilot-[A-Za-z0-9_-]+$")
     audience_size: int = Field(gt=0, le=500)
     content_id: str = Field(min_length=3, max_length=100)
@@ -471,10 +472,20 @@ def _connect(path: str) -> sqlite3.Connection:
             idempotency_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
             scheduled_for TEXT NOT NULL, status TEXT NOT NULL,
             audience_size INTEGER NOT NULL, budget REAL NOT NULL,
-            parameters_hash TEXT NOT NULL
+            parameters_hash TEXT NOT NULL, tenant_id TEXT NOT NULL
         )
         """
     )
+    pilot_columns = {
+        row["name"] for row in connection.execute(
+            "PRAGMA table_info(marketing_pilot_schedules)"
+        ).fetchall()
+    }
+    if "tenant_id" not in pilot_columns:
+        connection.execute(
+            "ALTER TABLE marketing_pilot_schedules "
+            "ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''"
+        )
     return connection
 
 
@@ -644,11 +655,13 @@ def schedule_pilot(path: str, request: PilotScheduleRequest) -> tuple[int, dict]
             return 409, {"code": "approval_parameters_mismatch"}
         schedule_id = str(uuid4())
         connection.execute(
-            "INSERT INTO marketing_pilot_schedules VALUES(?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO marketing_pilot_schedules "
+            "(schedule_id,approval_id,idempotency_key,created_at,scheduled_for,status,"
+            "audience_size,budget,parameters_hash,tenant_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
             (schedule_id, request.approval_id, request.idempotency_key,
              datetime.now(UTC).isoformat(), request.parameters.scheduled_for.isoformat(),
              "scheduled", request.parameters.audience_size, request.parameters.budget,
-             supplied_hash),
+             supplied_hash, request.parameters.tenant_id),
         )
     result = {
         "schedule_id": schedule_id, "status": "scheduled", "replayed": False,
@@ -678,14 +691,15 @@ def cancel_pilot(path: str, schedule_id: str) -> tuple[int, dict]:
     return 200, result
 
 
-def pilot_monitoring(path: str) -> dict:
+def pilot_monitoring(path: str, tenant_id: str) -> dict:
     with _connect(path) as connection:
         paused = bool(connection.execute(
             "SELECT paused FROM marketing_control WHERE singleton=1"
         ).fetchone()["paused"])
         rows = connection.execute(
             "SELECT status, COUNT(*) AS count, COALESCE(SUM(audience_size),0) AS audience, "
-            "COALESCE(SUM(budget),0) AS budget FROM marketing_pilot_schedules GROUP BY status"
+            "COALESCE(SUM(budget),0) AS budget FROM marketing_pilot_schedules "
+            "WHERE tenant_id=? GROUP BY status", (tenant_id,),
         ).fetchall()
     totals = {"schedules": 0, "audience": 0, "budget": 0.0}
     by_status = {}
@@ -694,5 +708,5 @@ def pilot_monitoring(path: str) -> dict:
         totals["schedules"] += row["count"]
         totals["audience"] += row["audience"]
         totals["budget"] += row["budget"]
-    return {"paused": paused, "by_status": by_status, "totals": totals,
+    return {"tenant_id": tenant_id, "paused": paused, "by_status": by_status, "totals": totals,
             "limits": {"audience_per_schedule": 500, "budget_per_schedule": 500}}

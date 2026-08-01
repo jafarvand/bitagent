@@ -1296,7 +1296,8 @@ def test_automation_sandbox_rejects_parameter_drift_and_global_pause():
 
 def test_controlled_pilot_schedules_exact_approved_parameters_and_monitors_then_cancels():
     parameters = {
-        "campaign_id": "pilot-campaign", "audience_id": "pilot-alpha",
+        "campaign_id": "pilot-campaign", "tenant_id": "tenant-alpha",
+        "audience_id": "pilot-alpha",
         "audience_size": 250, "content_id": "approved-content", "channel": "email",
         "scheduled_for": "2099-08-10T12:00:00Z", "budget": 200,
         "consent_confirmed": True, "suppression_checked": True,
@@ -1327,7 +1328,7 @@ def test_controlled_pilot_schedules_exact_approved_parameters_and_monitors_then_
         headers={"X-BitAgent-Role": "admin"}, json=payload,
     ).json()["schedule"]
     monitoring = client.get(
-        "/api/v0/marketing/pilot/monitoring",
+        "/api/v0/marketing/pilot/monitoring?tenant_id=tenant-alpha",
         headers={"X-BitAgent-Role": "admin"},
     ).json()
     cancelled = client.post(
@@ -1341,13 +1342,15 @@ def test_controlled_pilot_schedules_exact_approved_parameters_and_monitors_then_
     assert replay["schedule_id"] == first["schedule_id"]
     assert replay["replayed"] is True
     assert monitoring["by_status"] == {"scheduled": 1}
+    assert monitoring["tenant_id"] == "tenant-alpha"
     assert monitoring["totals"] == {"schedules": 1, "audience": 250, "budget": 200.0}
     assert cancelled["status"] == "cancelled"
 
 
 def test_controlled_pilot_limits_and_exact_approval_fail_closed():
     invalid = {
-        "campaign_id": "pilot-campaign", "audience_id": "pilot-alpha",
+        "campaign_id": "pilot-campaign", "tenant_id": "tenant-alpha",
+        "audience_id": "pilot-alpha",
         "audience_size": 501, "content_id": "approved-content", "channel": "paid",
         "scheduled_for": "2099-08-10T12:00:00Z", "budget": 501,
         "consent_confirmed": False, "suppression_checked": False,
@@ -1375,3 +1378,42 @@ def test_controlled_pilot_limits_and_exact_approval_fail_closed():
 
     assert denied.status_code == 403
     assert validation.status_code == 422
+
+
+def test_controlled_pilot_rejects_expired_and_parameter_drifted_approvals():
+    parameters = {
+        "campaign_id": "pilot-campaign", "tenant_id": "tenant-alpha",
+        "audience_id": "pilot-alpha", "audience_size": 100,
+        "content_id": "approved-content", "channel": "email",
+        "scheduled_for": "2099-08-10T12:00:00Z", "budget": 100,
+        "consent_confirmed": True, "suppression_checked": True,
+        "messages_last_7_days": 1,
+    }
+    approval = client.post(
+        "/api/v0/marketing/pilot/approvals",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "parameters": parameters, "maker": "maker", "checker": "checker",
+            "expires_at": "2099-08-09T12:00:00Z",
+        },
+    ).json()["approval"]
+    drifted = client.post(
+        "/api/v0/marketing/pilot/schedules",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "approval_id": approval["approval_id"], "idempotency_key": "pilot-drifted",
+            "parameters": {**parameters, "tenant_id": "tenant-beta"},
+        },
+    )
+    expired_approval = client.post(
+        "/api/v0/marketing/pilot/approvals",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "parameters": parameters, "maker": "maker", "checker": "checker",
+            "expires_at": "2025-08-09T12:00:00Z",
+        },
+    )
+
+    assert drifted.status_code == 409
+    assert drifted.json()["detail"]["code"] == "approval_parameters_mismatch"
+    assert expired_approval.status_code == 422
