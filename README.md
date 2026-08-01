@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.9.0 — Marketing Governance Foundation**
+Current release: **1.9.1 — Marketing Acquisition Planner**
 
 ## What version 0 shows
 
@@ -168,6 +168,7 @@ answers score zero and are never omitted from the overall result.
 | 1.1.21 | Bounded role-filtered session export with SHA-256 receipt | Complete |
 | 1.1.22 | Deterministic prompt-injection detection, refusal, and audit | Current |
 | 1.9.0 | Marketing data boundaries, lifecycle taxonomy, planning schema, and audit | Current |
+| 1.9.1 | Evidence-backed acquisition funnels, briefs, and KPI targets | Current |
 
 ## Project documents
 

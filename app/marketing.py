@@ -66,6 +66,69 @@ class CampaignPlanRequest(BaseModel):
         return self
 
 
+class AcquisitionPlanRequest(BaseModel):
+    product: str = Field(min_length=2, max_length=120)
+    segment: str = Field(min_length=3, max_length=200)
+    tenant_id: str = Field(min_length=1, max_length=100)
+    evidence: list[str] = Field(min_length=1, max_length=20)
+    channels: list[Literal["email", "social", "content", "partner", "referral", "paid"]] = Field(
+        min_length=1, max_length=6
+    )
+    target_qualified_visitors: int = Field(gt=0, le=10_000_000)
+    target_registration_rate_percent: float = Field(gt=0, le=100)
+    target_activation_rate_percent: float = Field(gt=0, le=100)
+    owner: str = Field(min_length=2, max_length=100)
+
+
+def build_acquisition_plan(path: str, request: AcquisitionPlanRequest) -> dict:
+    plan_id = str(uuid4())
+    registrations = round(
+        request.target_qualified_visitors * request.target_registration_rate_percent / 100
+    )
+    activations = round(registrations * request.target_activation_rate_percent / 100)
+    funnel = [
+        {"stage": "qualified_visit", "target": request.target_qualified_visitors},
+        {"stage": "registration_completed", "target": registrations},
+        {"stage": "verification_completed", "target": registrations},
+        {"stage": "first_successful_use", "target": activations},
+    ]
+    briefs = [
+        {
+            "channel": channel,
+            "objective": "Move consented qualified prospects to first successful use",
+            "audience": request.segment,
+            "message": f"Evidence-backed introduction to {request.product}",
+            "cta": "Review the approved product guide",
+            "status": "draft",
+            "claims_require_sources": True,
+        }
+        for channel in request.channels
+    ]
+    plan = {
+        "id": plan_id,
+        "type": "acquisition",
+        **request.model_dump(),
+        "funnel": funnel,
+        "kpi_targets": {
+            "qualified_visitors": request.target_qualified_visitors,
+            "registrations": registrations,
+            "activated_customers": activations,
+            "registration_rate_percent": request.target_registration_rate_percent,
+            "activation_rate_percent": request.target_activation_rate_percent,
+        },
+        "content_briefs": briefs,
+        "assumptions": [
+            "Targets are planning estimates, not forecasts.",
+            "Only consented, non-suppressed prospects may be included.",
+        ],
+        "status": "draft",
+        "approval_required": True,
+        "external_execution_enabled": False,
+    }
+    plan["audit"] = record_event(path, "acquisition_plan_created", plan_id, plan)
+    return plan
+
+
 def _canonical(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 

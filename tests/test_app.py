@@ -41,7 +41,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.9.0"
+    assert response.json()["version"] == "1.9.1"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -71,7 +71,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "1.9.0"
+    assert body["version"] == "1.9.1"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -205,7 +205,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.9.0",
+        "version": "1.9.1",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -738,7 +738,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.9.0"
+    assert report["version"] == "1.9.1"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -833,7 +833,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.9.0"
+    assert manifest["current_version"] == "1.9.1"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1015,3 +1015,33 @@ def test_marketing_plan_fails_validation_without_stop_conditions():
         headers={"X-BitAgent-Role": "operator"},
     )
     assert response.status_code == 422
+
+
+def test_acquisition_planner_builds_evidence_backed_funnel_and_briefs():
+    response = client.post(
+        "/api/v0/marketing/acquisition-plans",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "product": "bitAgent",
+            "segment": "consented operations leaders",
+            "tenant_id": "alpha",
+            "evidence": ["approved product capabilities v1.9"],
+            "channels": ["content", "email"],
+            "target_qualified_visitors": 1000,
+            "target_registration_rate_percent": 20,
+            "target_activation_rate_percent": 25,
+            "owner": "growth-owner",
+        },
+    )
+
+    assert response.status_code == 201
+    plan = response.json()["plan"]
+    assert plan["kpi_targets"]["registrations"] == 200
+    assert plan["kpi_targets"]["activated_customers"] == 50
+    assert [stage["stage"] for stage in plan["funnel"]] == [
+        "qualified_visit", "registration_completed", "verification_completed",
+        "first_successful_use",
+    ]
+    assert all(brief["status"] == "draft" for brief in plan["content_briefs"])
+    assert all(brief["claims_require_sources"] for brief in plan["content_briefs"])
+    assert plan["external_execution_enabled"] is False

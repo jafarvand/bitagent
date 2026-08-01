@@ -45,11 +45,13 @@ from app.incidents import detect_withdrawal_slowdown
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 from app.marketing import (
+    AcquisitionPlanRequest,
     CampaignPlanRequest,
     EVENT_TAXONOMY,
     GOVERNANCE,
     LIFECYCLE_STAGES,
     audit_events,
+    build_acquisition_plan,
     create_plan,
 )
 from app.ollama import OllamaError, ollama_client
@@ -63,7 +65,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.9.0"
+VERSION = "1.9.1"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -113,7 +115,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Marketing Governance Foundation",
+        "release": "Marketing Acquisition Planner",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -155,6 +157,20 @@ async def marketing_plan(
     if not decision["allowed"]:
         raise HTTPException(status_code=403, detail={"code": "marketing_role_denied"})
     return {"version": VERSION, "plan": create_plan(settings.evidence_db_path, request)}
+
+
+@app.post("/api/v0/marketing/acquisition-plans", status_code=201)
+async def acquisition_plan(
+    request: AcquisitionPlanRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("create_marketing_plan", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "marketing_role_denied"})
+    return {
+        "version": VERSION,
+        "plan": build_acquisition_plan(settings.evidence_db_path, request),
+    }
 
 
 @app.get("/api/v0/marketing/audit")

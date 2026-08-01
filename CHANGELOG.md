@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.9.1] - 2026-08-01
+
+- Added evidence-backed acquisition planning for consented prospect segments.
+- Added registration, verification, and activation funnel targets.
+- Added channel-specific draft briefs with source requirements and no execution.
+
 ## [1.9.0] - 2026-08-01
 
 - Added marketing governance and permitted/prohibited data boundaries.
