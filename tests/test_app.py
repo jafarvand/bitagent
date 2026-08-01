@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.3.0"
+    assert response.json()["version"] == "2.4.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.3.0"
+    assert body["version"] == "2.4.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.3.0",
+        "version": "2.4.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.3.0"
+    assert report["version"] == "2.4.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.3.0"
+    assert manifest["current_version"] == "2.4.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1676,3 +1676,66 @@ def test_xima_treasury_agent_blocks_stale_financial_evidence():
     assert result["status"] == "blocked"
     assert result["positions"] == []
     assert result["confidence"] == "none"
+
+
+def test_xima_aml_agent_prioritizes_transparently_and_builds_minimized_evidence_pack():
+    result = client.post(
+        "/api/v0/xima/agents/aml-fraud/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": datetime.now(UTC).isoformat(),
+            "evidence_refs": ["aml-alert-1", "transaction-1"], "owner": "compliance",
+            "evidence_fresh": True, "conflicting_fields": [],
+            "cases": [{
+                "case_id": "CASE-100", "status": "open", "age_seconds": 8000,
+                "sla_seconds": 7200,
+                "factors": [
+                    {"factor": "sanctions_provider_match", "weight": 70, "triggered": True,
+                     "evidence_ref": "provider-result-1", "explanation": "Provider returned a review match."},
+                    {"factor": "rapid_movement", "weight": 20, "triggered": True,
+                     "evidence_ref": "transaction-1", "explanation": "Movement timing crossed the rule."},
+                ],
+                "linked_patterns": [{
+                    "opaque_account_id": "acct-hash-2", "relationship": "shared_device",
+                    "evidence_ref": "graph-edge-1",
+                }],
+                "transactions": [{
+                    "transaction_ref": "tx-hash-1", "direction": "withdrawal", "asset": "BTC",
+                    "amount_bucket": "1000-10000-usd", "risk_indicators": ["rapid_movement"],
+                    "observed_at": datetime.now(UTC).isoformat(),
+                }],
+            }],
+        },
+    ).json()["analysis"]
+
+    case = result["cases"][0]
+    assert result["priority"] == "critical"
+    assert case["score"] == 90
+    assert case["sla_breached"] is True
+    assert case["human_decision_required"] is True
+    assert case["evidence_pack"]["linked_accounts"][0]["opaque_account_id"] == "acct-hash-2"
+    assert "legal conclusion" in case["case_note_draft"]
+    assert result["queue_brief"]["sla_breaches"] == 1
+    assert result["action_executed"] is False
+
+
+def test_xima_aml_feedback_is_role_gated_append_only_and_local():
+    payload = {
+        "tenant_id": "exchange-a", "case_id": "CASE-100", "reviewer": "aml-reviewer",
+        "outcome": "false_positive", "correction": "Provider match was cleared by owner review.",
+    }
+    denied = client.post(
+        "/api/v0/xima/agents/aml-fraud/feedback",
+        headers={"X-BitAgent-Role": "viewer"}, json=payload,
+    )
+    accepted = client.post(
+        "/api/v0/xima/agents/aml-fraud/feedback",
+        headers={"X-BitAgent-Role": "operator"}, json=payload,
+    )
+
+    assert denied.status_code == 403
+    assert accepted.status_code == 201
+    feedback = accepted.json()["feedback"]
+    assert feedback["outcome"] == "false_positive"
+    assert feedback["record_hash"]
+    assert feedback["exchange_write_performed"] is False

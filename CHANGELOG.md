@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.4.0] - 2026-08-01
+
+- Added transparent factor-weighted AML/fraud case prioritization and SLA escalation.
+- Added minimized transaction and linked-account evidence packs, human-review notes, and ranked queue briefs.
+- Added append-only false-positive and correction feedback that never changes exchange case state.
+
 ## [2.3.0] - 2026-08-01
 
 - Added decimal-safe controlled-asset, customer-liability, coverage, and valuation summaries.
