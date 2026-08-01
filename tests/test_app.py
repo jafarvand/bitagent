@@ -41,7 +41,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.9.3"
+    assert response.json()["version"] == "1.9.4"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -71,7 +71,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "1.9.3"
+    assert body["version"] == "1.9.4"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -205,7 +205,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.9.3",
+        "version": "1.9.4",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -738,7 +738,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.9.3"
+    assert report["version"] == "1.9.4"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -833,7 +833,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.9.3"
+    assert manifest["current_version"] == "1.9.4"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1157,3 +1157,69 @@ def test_content_studio_blocks_unsubstantiated_and_prohibited_claims():
         "calendar_dependency": False,
     }
     assert artifact["publish_enabled"] is False
+
+
+def test_measurement_reports_funnel_attribution_and_valid_experiment():
+    response = client.post(
+        "/api/v0/marketing/measurements",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "campaign_id": "campaign-123",
+            "impressions": 10000,
+            "visits": 1000,
+            "registrations": 200,
+            "activations": 50,
+            "retained": 40,
+            "spend": 500,
+            "opt_outs": 5,
+            "complaints": 0,
+            "delivered": 1000,
+            "variants": [
+                {"name": "A", "assigned": 500, "conversions": 30},
+                {"name": "B", "assigned": 500, "conversions": 40},
+            ],
+            "attribution_model": "last_touch",
+            "minimum_sample_per_variant": 100,
+        },
+    )
+
+    report = response.json()["report"]
+    assert report["funnel"]["visit_to_registration_percent"] == 20.0
+    assert report["funnel"]["activation_to_retained_percent"] == 80.0
+    assert report["attribution"]["model"] == "last_touch"
+    assert "not causal proof" in report["attribution"]["boundary"]
+    assert report["experiment"]["sample_ratio_mismatch"] is False
+    assert report["experiment"]["premature"] is False
+    assert report["performance_brief"]["recommendation"] == "keep"
+    assert report["action_executed"] is False
+
+
+def test_measurement_stops_on_guardrail_and_flags_invalid_experiment():
+    response = client.post(
+        "/api/v0/marketing/measurements",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "campaign_id": "campaign-risky",
+            "impressions": 1000,
+            "visits": 100,
+            "registrations": 10,
+            "activations": 2,
+            "retained": 1,
+            "spend": 50,
+            "opt_outs": 20,
+            "complaints": 5,
+            "delivered": 100,
+            "variants": [
+                {"name": "A", "assigned": 90, "conversions": 2},
+                {"name": "B", "assigned": 10, "conversions": 1},
+            ],
+            "attribution_model": "unattributed",
+            "minimum_sample_per_variant": 100,
+        },
+    )
+
+    report = response.json()["report"]
+    assert report["experiment"]["sample_ratio_mismatch"] is True
+    assert report["experiment"]["premature"] is True
+    assert report["guardrails"]["complaint_rate_ok"] is False
+    assert report["performance_brief"]["recommendation"] == "stop"

@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.9.3 — Governed Marketing Content Studio**
+Current release: **1.9.4 — Marketing Measurement**
 
 ## What version 0 shows
 
@@ -171,6 +171,7 @@ answers score zero and are never omitted from the overall result.
 | 1.9.1 | Evidence-backed acquisition funnels, briefs, and KPI targets | Current |
 | 1.9.2 | Lifecycle retention, adoption, onboarding, and re-engagement plans | Current |
 | 1.9.3 | Multi-channel variants, compliance checks, and campaign calendar | Current |
+| 1.9.4 | Funnel reporting, attribution boundaries, experiments, and briefs | Current |
 
 ## Project documents
 

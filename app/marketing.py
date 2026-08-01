@@ -111,6 +111,98 @@ class ContentStudioRequest(BaseModel):
     approval_due_at: datetime
 
 
+class VariantMetric(BaseModel):
+    name: str = Field(min_length=1, max_length=20)
+    assigned: int = Field(ge=0)
+    conversions: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def conversions_do_not_exceed_sample(self):
+        if self.conversions > self.assigned:
+            raise ValueError("conversions cannot exceed assigned sample")
+        return self
+
+
+class MeasurementRequest(BaseModel):
+    campaign_id: str = Field(min_length=3, max_length=100)
+    impressions: int = Field(ge=0)
+    visits: int = Field(ge=0)
+    registrations: int = Field(ge=0)
+    activations: int = Field(ge=0)
+    retained: int = Field(ge=0)
+    spend: float = Field(ge=0)
+    opt_outs: int = Field(ge=0)
+    complaints: int = Field(ge=0)
+    delivered: int = Field(ge=0)
+    variants: list[VariantMetric] = Field(min_length=2, max_length=10)
+    attribution_model: Literal["last_touch", "first_touch", "unattributed"]
+    minimum_sample_per_variant: int = Field(default=100, ge=10, le=1_000_000)
+
+
+def build_measurement(path: str, request: MeasurementRequest) -> dict:
+    report_id = str(uuid4())
+    def rate(numerator: int, denominator: int) -> float | None:
+        return round(numerator / denominator * 100, 2) if denominator else None
+
+    total_assigned = sum(item.assigned for item in request.variants)
+    expected = total_assigned / len(request.variants) if request.variants else 0
+    srm = bool(expected) and any(
+        abs(item.assigned - expected) / expected > 0.10 for item in request.variants
+    )
+    premature = any(item.assigned < request.minimum_sample_per_variant for item in request.variants)
+    variant_results = [
+        {
+            **item.model_dump(),
+            "conversion_rate_percent": rate(item.conversions, item.assigned),
+        }
+        for item in request.variants
+    ]
+    complaint_rate = rate(request.complaints, request.delivered)
+    opt_out_rate = rate(request.opt_outs, request.delivered)
+    guardrails = {
+        "complaint_rate_percent": complaint_rate,
+        "complaint_rate_ok": complaint_rate is not None and complaint_rate <= 0.1,
+        "opt_out_rate_percent": opt_out_rate,
+        "opt_out_rate_ok": opt_out_rate is not None and opt_out_rate <= 1.0,
+        "spend_nonnegative": request.spend >= 0,
+    }
+    if not all(guardrails[key] for key in ("complaint_rate_ok", "opt_out_rate_ok", "spend_nonnegative")):
+        recommendation = "stop"
+    elif srm or premature:
+        recommendation = "change"
+    else:
+        recommendation = "keep"
+    report = {
+        "id": report_id,
+        "campaign_id": request.campaign_id,
+        "funnel": {
+            "impression_to_visit_percent": rate(request.visits, request.impressions),
+            "visit_to_registration_percent": rate(request.registrations, request.visits),
+            "registration_to_activation_percent": rate(request.activations, request.registrations),
+            "activation_to_retained_percent": rate(request.retained, request.activations),
+        },
+        "attribution": {
+            "model": request.attribution_model,
+            "boundary": "Directional aggregate attribution; not causal proof.",
+            "uncertainty": "Channel overlap and unobserved touchpoints are not resolved.",
+        },
+        "experiment": {
+            "variants": variant_results,
+            "sample_ratio_mismatch": srm,
+            "premature": premature,
+            "minimum_sample_per_variant": request.minimum_sample_per_variant,
+        },
+        "guardrails": guardrails,
+        "performance_brief": {
+            "recommendation": recommendation,
+            "reason": "Guardrails take priority; otherwise experiment validity controls the decision.",
+        },
+        "action_executed": False,
+    }
+    report["audit"] = record_event(path, "measurement_report_created", report_id, report)
+    return report
+
+
 def build_content_studio(path: str, request: ContentStudioRequest) -> dict:
     artifact_id = str(uuid4())
     prohibited_terms = ("guaranteed profit", "risk-free", "act now or lose", "secret strategy")

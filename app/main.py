@@ -51,10 +51,12 @@ from app.marketing import (
     EVENT_TAXONOMY,
     GOVERNANCE,
     LIFECYCLE_STAGES,
+    MeasurementRequest,
     RetentionPlanRequest,
     audit_events,
     build_acquisition_plan,
     build_content_studio,
+    build_measurement,
     build_retention_plan,
     create_plan,
 )
@@ -69,7 +71,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.9.3"
+VERSION = "1.9.4"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -119,7 +121,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Governed Marketing Content Studio",
+        "release": "Marketing Measurement",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -202,6 +204,20 @@ async def marketing_content(
     return {
         "version": VERSION,
         "artifact": build_content_studio(settings.evidence_db_path, request),
+    }
+
+
+@app.post("/api/v0/marketing/measurements", status_code=201)
+async def marketing_measurement(
+    request: MeasurementRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("create_marketing_plan", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "marketing_role_denied"})
+    return {
+        "version": VERSION,
+        "report": build_measurement(settings.evidence_db_path, request),
     }
 
 

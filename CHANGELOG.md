@@ -2,6 +2,13 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.9.4] - 2026-08-01
+
+- Added aggregate acquisition, activation, retention, spend, and safety reporting.
+- Added explicit attribution boundaries and uncertainty.
+- Added sample-ratio mismatch, minimum-sample, and campaign guardrail checks.
+- Added deterministic keep/change/stop performance briefs.
+
 ## [1.9.3] - 2026-08-01
 
 - Added governed multi-channel content variants and campaign calendar dependencies.
