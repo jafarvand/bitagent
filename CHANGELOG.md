@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.3.0] - 2026-08-01
+
+- Added decimal-safe controlled-asset, customer-liability, coverage, and valuation summaries.
+- Added wallet threshold/connectivity exceptions and unresolved-obligation aging.
+- Added ledger, wallet, and external-source reconciliation with tolerances, incomplete-source escalation, and treasury briefs.
+
 ## [2.2.0] - 2026-08-01
 
 - Added order-book spread and 100-basis-point depth calculations with market-quality findings.

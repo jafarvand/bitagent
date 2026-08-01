@@ -85,8 +85,9 @@ from app.readiness import (
 from app.xima import EvidenceEnvelope, ingest_evidence, replay_evidence, source_health, verify_xima_chain
 from app.xima_operations import OperationsAnalysisRequest, analyze_operations
 from app.xima_market import MarketRiskRequest as XimaMarketRiskRequest, analyze_market_risk as analyze_xima_market_risk
+from app.xima_treasury import TreasuryAnalysisRequest, analyze_treasury
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -136,7 +137,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA Market and Risk Intelligence",
+        "release": "XIMA Treasury and Reconciliation",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -421,6 +422,15 @@ async def xima_market_risk_analyze(
 ):
     authorize("view_xima", role)
     return {"version": VERSION, "analysis": analyze_xima_market_risk(request)}
+
+
+@app.post("/api/v0/xima/agents/treasury/analyze")
+async def xima_treasury_analyze(
+    request: TreasuryAnalysisRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "analysis": analyze_treasury(request)}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:

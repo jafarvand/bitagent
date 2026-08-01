@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.2.0 — XIMA Market and Risk Intelligence**
+Current release: **2.3.0 — XIMA Treasury and Reconciliation**
 
 ## What version 0 shows
 
@@ -176,8 +176,8 @@ answers score zero and are never omitted from the overall result.
 | 1.10.0 | Limited controlled scheduling, cancellation, and monitoring | Complete |
 | 2.0.0 | Multi-domain evidence contracts, lineage, freshness, quality, and replay | Complete |
 | 2.1.0 | Operations dependency, error, queue, capacity, and incident intelligence | Complete |
-| 2.2.0 | Liquidity, volatility, exposure, concentration, and market quality | Current |
-| 2.3.0 | Treasury, liabilities, wallet thresholds, reconciliation, and obligations | Planned |
+| 2.2.0 | Liquidity, volatility, exposure, concentration, and market quality | Complete |
+| 2.3.0 | Treasury, liabilities, wallet thresholds, reconciliation, and obligations | Current |
 | 2.4.0 | Transparent AML/fraud prioritization and evidence packs | Planned |
 | 2.5.0 | Correlated security intelligence and escalation | Planned |
 | 2.6.0 | Support intelligence and governed cited knowledge | Planned |

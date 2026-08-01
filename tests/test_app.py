@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.2.0"
+    assert response.json()["version"] == "2.3.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.2.0"
+    assert body["version"] == "2.3.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.2.0",
+        "version": "2.3.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.2.0"
+    assert report["version"] == "2.3.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.2.0"
+    assert manifest["current_version"] == "2.3.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1612,3 +1612,67 @@ def test_xima_market_agent_rejects_crossed_book_and_blocks_stale_evidence():
     assert blocked["status"] == "blocked"
     assert blocked["confidence"] == "none"
     assert crossed.status_code == 422
+
+
+def test_xima_treasury_agent_calculates_coverage_thresholds_aging_and_reconciliation():
+    result = client.post(
+        "/api/v0/xima/agents/treasury/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": datetime.now(UTC).isoformat(),
+            "evidence_refs": ["ledger-1", "wallet-1", "custodian-1"],
+            "owner": "treasury", "evidence_fresh": True, "conflicting_fields": [],
+            "positions": [{
+                "asset": "BTC", "controlled_assets": "90", "customer_liabilities": "100",
+                "valuation_price": "60000",
+            }],
+            "wallets": [{
+                "wallet_group": "btc-hot", "asset": "BTC", "custody_tier": "hot",
+                "available": "2", "minimum_operational": "5", "maximum_operational": "20",
+                "connected": True,
+            }],
+            "obligations": [{
+                "obligation_id": "settlement-1", "asset": "BTC", "amount": "1",
+                "due_at": "2025-01-01T00:00:00Z", "status": "open", "owner": "treasury",
+            }],
+            "reconciliation": [{
+                "asset": "BTC", "ledger_amount": "110", "wallet_amount": "100",
+                "external_amount": "5", "tolerance": "1", "source_complete": True,
+            }],
+        },
+    ).json()["analysis"]
+
+    assert result["status"] == "ready"
+    assert result["severity"] == "critical"
+    assert result["positions"][0]["coverage_percent"] == "90.00"
+    assert result["positions"][0]["deficit"] is True
+    assert result["wallet_exceptions"][0]["reason"] == "below_minimum"
+    assert result["obligations"][0]["overdue"] is True
+    assert result["reconciliation"][0]["difference"] == "-5.00000000"
+    assert result["reconciliation"][0]["within_tolerance"] is False
+    assert result["treasury_brief"]["deficit_assets"] == ["BTC"]
+    assert result["action_executed"] is False
+
+
+def test_xima_treasury_agent_blocks_stale_financial_evidence():
+    result = client.post(
+        "/api/v0/xima/agents/treasury/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": datetime.now(UTC).isoformat(),
+            "evidence_refs": ["ledger-stale"], "owner": "treasury",
+            "evidence_fresh": False, "conflicting_fields": [],
+            "positions": [{
+                "asset": "BTC", "controlled_assets": "100", "customer_liabilities": "100",
+                "valuation_price": "60000",
+            }],
+            "reconciliation": [{
+                "asset": "BTC", "ledger_amount": "100", "wallet_amount": "100",
+                "external_amount": "0", "tolerance": "0", "source_complete": True,
+            }],
+        },
+    ).json()["analysis"]
+
+    assert result["status"] == "blocked"
+    assert result["positions"] == []
+    assert result["confidence"] == "none"
