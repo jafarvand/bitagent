@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.6.0"
+    assert response.json()["version"] == "2.7.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.6.0"
+    assert body["version"] == "2.7.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.6.0",
+        "version": "2.7.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.6.0"
+    assert report["version"] == "2.7.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.6.0"
+    assert manifest["current_version"] == "2.7.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1882,3 +1882,105 @@ def test_xima_support_agent_redacts_classifies_escalates_and_cites_safe_draft():
     assert result["human_review_required"] is True
     assert result["send_enabled"] is False
     assert result["action_executed"] is False
+
+
+def test_xima_cross_domain_policy_fails_closed_for_prohibited_cross_tenant_and_restricted_data():
+    base = {
+        "role": "admin", "tenant_match": True, "domain": "treasury",
+        "data_class": "restricted", "environment": "production", "risk": "prohibited",
+        "action": "transfer_funds", "evidence_fresh": True,
+        "mfa_present": True, "approval_count": 2,
+    }
+    prohibited = client.post(
+        "/api/v0/xima/governance/policy/evaluate",
+        headers={"X-BitAgent-Role": "operator"}, json=base,
+    ).json()["result"]
+    cross_tenant = client.post(
+        "/api/v0/xima/governance/policy/evaluate",
+        headers={"X-BitAgent-Role": "operator"},
+        json={**base, "action": "view", "risk": "advisory", "tenant_match": False},
+    ).json()["result"]
+    restricted = client.post(
+        "/api/v0/xima/governance/policy/evaluate",
+        headers={"X-BitAgent-Role": "operator"},
+        json={**base, "role": "operator", "action": "view", "risk": "advisory"},
+    ).json()["result"]
+
+    assert prohibited["allowed"] is False
+    assert "prohibited_action" in prohibited["reasons"]
+    assert cross_tenant["allowed"] is False
+    assert "cross_tenant_denied" in cross_tenant["reasons"]
+    assert restricted["allowed"] is False
+    assert "restricted_data_role_denied" in restricted["reasons"]
+    assert prohibited["action_executed"] is False
+
+
+def test_xima_registry_is_admin_only_versioned_and_append_only():
+    payload = {
+        "kind": "rule", "name": "treasury-coverage", "version": "1.0.0",
+        "configuration_hash": "a" * 64, "owner": "risk", "approved": True,
+        "fallback_name": "manual-review", "rollback_version": "0.9.0",
+    }
+    denied = client.post(
+        "/api/v0/xima/governance/registry",
+        headers={"X-BitAgent-Role": "operator"}, json=payload,
+    )
+    created = client.post(
+        "/api/v0/xima/governance/registry",
+        headers={"X-BitAgent-Role": "admin"}, json=payload,
+    )
+    duplicate = client.post(
+        "/api/v0/xima/governance/registry",
+        headers={"X-BitAgent-Role": "admin"}, json=payload,
+    )
+
+    assert denied.status_code == 403
+    assert created.status_code == 201
+    assert created.json()["entry"]["record_hash"]
+    assert duplicate.status_code == 409
+
+
+def test_xima_evaluation_gates_quality_safety_latency_cost_drift_and_fallback():
+    good_case = {
+        "case_id": "case-good", "grounded": True, "correct": True,
+        "complete": True, "citations_valid": True, "prohibited_action_refused": True,
+        "latency_ms": 100, "cost_usd": 0.01,
+    }
+    passed = client.post(
+        "/api/v0/xima/governance/evaluations",
+        headers={"X-BitAgent-Role": "auditor"},
+        json={
+            "component_name": "treasury-agent", "component_version": "2.3.0",
+            "cases": [good_case],
+            "adversarial_cases": [{
+                "case_id": "attack-1", "attack_type": "data_exfiltration",
+                "blocked": True, "data_leaked": False,
+            }],
+            "baseline_correctness_percent": 100, "max_p95_latency_ms": 500,
+            "max_average_cost_usd": 0.05,
+        },
+    ).json()["evaluation"]
+    failed = client.post(
+        "/api/v0/xima/governance/evaluations",
+        headers={"X-BitAgent-Role": "auditor"},
+        json={
+            "component_name": "treasury-agent", "component_version": "2.3.1",
+            "cases": [{**good_case, "correct": False, "latency_ms": 1000}],
+            "adversarial_cases": [{
+                "case_id": "attack-2", "attack_type": "cross_tenant",
+                "blocked": False, "data_leaked": True,
+            }],
+            "baseline_correctness_percent": 100, "max_p95_latency_ms": 500,
+            "max_average_cost_usd": 0.05,
+        },
+    ).json()["evaluation"]
+
+    assert passed["status"] == "passed"
+    assert passed["release_allowed"] is True
+    assert failed["status"] == "failed"
+    assert failed["metrics"]["data_leak_count"] == 1
+    assert failed["gates"]["correctness"] is False
+    assert failed["gates"]["latency"] is False
+    assert failed["gates"]["adversarial"] is False
+    assert failed["fallback_required"] is True
+    assert failed["human_escalation_required"] is True

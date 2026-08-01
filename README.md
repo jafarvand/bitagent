@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.6.0 — XIMA Support and Governed Knowledge**
+Current release: **2.7.0 — XIMA Governance and Evaluation**
 
 ## What version 0 shows
 
@@ -180,8 +180,8 @@ answers score zero and are never omitted from the overall result.
 | 2.3.0 | Treasury, liabilities, wallet thresholds, reconciliation, and obligations | Complete |
 | 2.4.0 | Transparent AML/fraud prioritization and evidence packs | Complete |
 | 2.5.0 | Correlated security intelligence and escalation | Complete |
-| 2.6.0 | Support intelligence and governed cited knowledge | Current |
-| 2.7.0 | Cross-domain policy, registry, adversarial and quality evaluation | Planned |
+| 2.6.0 | Support intelligence and governed cited knowledge | Complete |
+| 2.7.0 | Cross-domain policy, registry, adversarial and quality evaluation | Current |
 | 2.8.0 | Shadow outcomes, reliability evidence, and readiness gates | Planned |
 | 2.9.0 | General maker-checker action sandbox and rollback | Planned |
 

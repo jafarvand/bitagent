@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.7.0] - 2026-08-01
+
+- Added fail-closed cross-domain policy decisions by role, tenant, data class, environment, risk, action, freshness, MFA, and approvals.
+- Added append-only model, prompt, tool, and rule registry entries with configuration, fallback, and rollback metadata.
+- Added groundedness, correctness, completeness, citation, refusal, adversarial leakage, latency, cost, drift, fallback, and escalation evaluation gates.
+
 ## [2.6.0] - 2026-08-01
 
 - Added tenant-scoped versioned knowledge with owner, approval, role, effective-date, expiry, source, and content-hash controls.

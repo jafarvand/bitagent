@@ -92,8 +92,12 @@ from app.xima_support import (
     KnowledgeDocumentRequest, SupportTicketRequest, analyze_support,
     ingest_knowledge, retrieve_knowledge,
 )
+from app.xima_governance import (
+    EvaluationRequest as XimaEvaluationRequest, RegistryEntryRequest,
+    XimaPolicyRequest, evaluate_quality, evaluate_xima_policy, register_component,
+)
 
-VERSION = "2.6.0"
+VERSION = "2.7.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -143,7 +147,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA Support and Governed Knowledge",
+        "release": "XIMA Governance and Evaluation",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -502,6 +506,38 @@ async def xima_support_analyze(
     decision = authorize("view_xima", role)
     return {"version": VERSION,
             "analysis": analyze_support(settings.evidence_db_path, request, decision["role"])}
+
+
+@app.post("/api/v0/xima/governance/policy/evaluate")
+async def xima_policy_evaluate(
+    request: XimaPolicyRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "result": evaluate_xima_policy(request)}
+
+
+@app.post("/api/v0/xima/governance/registry", status_code=201)
+async def xima_registry_create(
+    request: RegistryEntryRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_xima_governance", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "governance_role_denied"})
+    status_code, result = register_component(settings.evidence_db_path, request)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "entry": result}
+
+
+@app.post("/api/v0/xima/governance/evaluations")
+async def xima_evaluation(
+    request: XimaEvaluationRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "evaluation": evaluate_quality(request)}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:
