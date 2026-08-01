@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.5.0] - 2026-08-01
+
+- Added correlation across authentication, admin, IAM, WAF, host, and application events.
+- Added suspicious-access narratives and privileged-action checks for MFA and approved change references.
+- Added deterministic escalation and daily security briefs using minimized actor and network identifiers.
+
 ## [2.4.0] - 2026-08-01
 
 - Added transparent factor-weighted AML/fraud case prioritization and SLA escalation.

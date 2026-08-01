@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.4.0"
+    assert response.json()["version"] == "2.5.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.4.0"
+    assert body["version"] == "2.5.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.4.0",
+        "version": "2.5.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.4.0"
+    assert report["version"] == "2.5.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.4.0"
+    assert manifest["current_version"] == "2.5.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1739,3 +1739,69 @@ def test_xima_aml_feedback_is_role_gated_append_only_and_local():
     assert feedback["outcome"] == "false_positive"
     assert feedback["record_hash"]
     assert feedback["exchange_write_performed"] is False
+
+
+def test_xima_security_agent_correlates_cross_source_and_privileged_activity():
+    occurred_at = datetime.now(UTC).isoformat()
+    result = client.post(
+        "/api/v0/xima/agents/security/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": occurred_at,
+            "evidence_refs": ["auth-stream", "iam-stream", "waf-stream"],
+            "owner": "security-on-call", "evidence_fresh": True, "conflicting_fields": [],
+            "events": [
+                {"event_id": "evt-auth", "category": "authentication", "action": "login",
+                 "outcome": "failure", "source_severity": "high", "occurred_at": occurred_at,
+                 "opaque_actor_id": "actor-hash", "target": "admin-console",
+                 "source_classification": "external-high-risk", "correlation_id": "corr-1",
+                 "privileged": False, "mfa_present": False,
+                 "risk_indicators": ["credential_compromise"]},
+                {"event_id": "evt-iam", "category": "iam", "action": "grant-role",
+                 "outcome": "success", "source_severity": "high", "occurred_at": occurred_at,
+                 "opaque_actor_id": "actor-hash", "target": "treasury-admin",
+                 "source_classification": "external-high-risk", "correlation_id": "corr-1",
+                 "privileged": True, "mfa_present": False, "approved_change_ref": None,
+                 "risk_indicators": []},
+                {"event_id": "evt-waf", "category": "waf", "action": "suspicious-request",
+                 "outcome": "blocked", "source_severity": "medium", "occurred_at": occurred_at,
+                 "opaque_actor_id": "actor-hash", "target": "admin-api",
+                 "source_classification": "external-high-risk", "correlation_id": "corr-1",
+                 "privileged": False, "mfa_present": False, "risk_indicators": []},
+            ],
+        },
+    ).json()["analysis"]
+
+    incident = result["incidents"][0]
+    assert result["severity"] == "critical"
+    assert incident["categories"] == ["authentication", "iam", "waf"]
+    assert incident["privileged_unapproved"] is True
+    assert incident["privileged_without_mfa"] is True
+    assert incident["escalate"] is True
+    assert "opaque actor" in incident["narrative"]
+    assert result["privileged_activity"][0]["review_required"] is True
+    assert result["daily_brief"]["critical_count"] == 1
+    assert result["action_executed"] is False
+
+
+def test_xima_security_agent_blocks_conflicting_evidence():
+    result = client.post(
+        "/api/v0/xima/agents/security/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": datetime.now(UTC).isoformat(),
+            "evidence_refs": ["security-stale"], "owner": "security",
+            "evidence_fresh": True, "conflicting_fields": ["event.outcome"],
+            "events": [{
+                "event_id": "evt-1", "category": "authentication", "action": "login",
+                "outcome": "unknown", "source_severity": "low",
+                "occurred_at": datetime.now(UTC).isoformat(), "opaque_actor_id": "actor-1",
+                "target": "portal", "source_classification": "unknown",
+                "correlation_id": "corr-1",
+            }],
+        },
+    ).json()["analysis"]
+
+    assert result["status"] == "blocked"
+    assert result["incidents"] == []
+    assert result["confidence"] == "none"
