@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.1.0"
+    assert response.json()["version"] == "2.2.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.1.0"
+    assert body["version"] == "2.2.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.1.0",
+        "version": "2.2.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.1.0"
+    assert report["version"] == "2.2.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.1.0"
+    assert manifest["current_version"] == "2.2.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1551,3 +1551,64 @@ def test_xima_operations_agent_blocks_stale_or_conflicting_evidence():
     assert result["confidence"] == "none"
     assert result["findings"] == []
     assert result["action_executed"] is False
+
+
+def test_xima_market_agent_calculates_liquidity_abnormal_activity_and_limit_breaches():
+    result = client.post(
+        "/api/v0/xima/agents/market-risk/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "market": "BTC_USDT",
+            "observed_at": datetime.now(UTC).isoformat(),
+            "evidence_refs": ["book-1", "trades-1", "risk-1"], "owner": "market-risk",
+            "evidence_fresh": True, "conflicting_fields": [],
+            "bids": [{"price": "99", "quantity": "50"}, {"price": "98", "quantity": "20"}],
+            "asks": [{"price": "101", "quantity": "40"}, {"price": "102", "quantity": "20"}],
+            "recent_closes": ["80", "100", "75", "105"],
+            "current_volume": "4000", "baseline_volume": "1000",
+            "reference_price": "80",
+            "exposures": [
+                {"asset": "BTC", "value": "120000", "limit": "100000", "counterparty_class": "custody"},
+                {"asset": "ETH", "value": "20000", "limit": "50000", "counterparty_class": "custody"},
+            ],
+        },
+    ).json()["analysis"]
+
+    assert result["status"] == "ready"
+    assert result["severity"] == "critical"
+    assert result["metrics"]["spread_bps"] == "200.00"
+    assert result["metrics"]["volume_multiple"] == "4.00"
+    assert result["metrics"]["concentration_percent"] == "85.71"
+    assert result["limit_breaches"][0]["asset"] == "BTC"
+    assert {item["type"] for item in result["findings"]} >= {
+        "wide_spread", "high_volatility", "abnormal_volume",
+        "reference_divergence", "exposure_concentration", "limit_breach",
+    }
+    assert result["market_quality_brief"]["limit_breach_count"] == 1
+    assert result["action_executed"] is False
+
+
+def test_xima_market_agent_rejects_crossed_book_and_blocks_stale_evidence():
+    base = {
+        "tenant_id": "exchange-a", "market": "BTC_USDT",
+        "observed_at": datetime.now(UTC).isoformat(), "evidence_refs": ["book-1"],
+        "owner": "market-risk", "evidence_fresh": False, "conflicting_fields": [],
+        "bids": [{"price": "99", "quantity": "1"}],
+        "asks": [{"price": "101", "quantity": "1"}],
+        "recent_closes": ["99", "100", "101"],
+        "current_volume": "10", "baseline_volume": "10", "reference_price": "100",
+        "exposures": [{"asset": "BTC", "value": "10", "limit": "100", "counterparty_class": "custody"}],
+    }
+    blocked = client.post(
+        "/api/v0/xima/agents/market-risk/analyze",
+        headers={"X-BitAgent-Role": "operator"}, json=base,
+    ).json()["analysis"]
+    crossed = client.post(
+        "/api/v0/xima/agents/market-risk/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={**base, "bids": [{"price": "102", "quantity": "1"}]},
+    )
+
+    assert blocked["status"] == "blocked"
+    assert blocked["confidence"] == "none"
+    assert crossed.status_code == 422

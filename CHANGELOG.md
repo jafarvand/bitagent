@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.2.0] - 2026-08-01
+
+- Added order-book spread and 100-basis-point depth calculations with market-quality findings.
+- Added return volatility, abnormal volume, reference-price divergence, and concentration detection.
+- Added decimal-safe exposure-limit utilization and breach explanations with fail-closed evidence checks.
+
 ## [2.1.0] - 2026-08-01
 
 - Added deterministic service dependency, error, latency, and capacity analysis.
