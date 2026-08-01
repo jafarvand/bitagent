@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.9.5] - 2026-08-01
+
+- Added exact-parameter maker-checker approval receipts for test audiences.
+- Added idempotent sandbox dry runs with expiry and global-pause enforcement.
+- Added auditable rollback with no downstream request execution.
+
 ## [1.9.4] - 2026-08-01
 
 - Added aggregate acquisition, activation, retention, spend, and safety reporting.

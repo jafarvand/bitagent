@@ -38,6 +38,7 @@ ROLE_CAPABILITIES = {
         "create_marketing_plan",
         "view_marketing",
         "view_marketing_audit",
+        "manage_marketing_automation",
     },
 }
 

@@ -46,6 +46,7 @@ from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 from app.marketing import (
     AcquisitionPlanRequest,
+    AutomationApprovalRequest,
     CampaignPlanRequest,
     ContentStudioRequest,
     EVENT_TAXONOMY,
@@ -53,12 +54,17 @@ from app.marketing import (
     LIFECYCLE_STAGES,
     MeasurementRequest,
     RetentionPlanRequest,
+    SandboxExecutionRequest,
     audit_events,
     build_acquisition_plan,
     build_content_studio,
     build_measurement,
     build_retention_plan,
+    create_automation_approval,
     create_plan,
+    execute_sandbox,
+    rollback_sandbox,
+    set_automation_pause,
 )
 from app.ollama import OllamaError, ollama_client
 from app.policy import evaluate_policy
@@ -71,7 +77,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.9.4"
+VERSION = "1.9.5"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -121,7 +127,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Marketing Measurement",
+        "release": "Marketing Automation Sandbox",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -219,6 +225,56 @@ async def marketing_measurement(
         "version": VERSION,
         "report": build_measurement(settings.evidence_db_path, request),
     }
+
+
+@app.post("/api/v0/marketing/automation/approvals", status_code=201)
+async def automation_approval(
+    request: AutomationApprovalRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_marketing_automation", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
+    return {"version": VERSION, "approval": create_automation_approval(settings.evidence_db_path, request)}
+
+
+@app.post("/api/v0/marketing/automation/dry-runs")
+async def automation_dry_run(
+    request: SandboxExecutionRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_marketing_automation", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
+    status_code, result = execute_sandbox(settings.evidence_db_path, request)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "execution": result}
+
+
+@app.post("/api/v0/marketing/automation/executions/{execution_id}/rollback")
+async def automation_rollback(
+    execution_id: str,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_marketing_automation", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
+    status_code, result = rollback_sandbox(settings.evidence_db_path, execution_id)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "execution": result}
+
+
+@app.post("/api/v0/marketing/automation/pause")
+async def automation_pause(
+    paused: bool,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_marketing_automation", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
+    return {"version": VERSION, **set_automation_pause(settings.evidence_db_path, paused)}
 
 
 @app.get("/api/v0/marketing/audit")

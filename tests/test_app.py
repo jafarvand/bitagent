@@ -41,7 +41,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.9.4"
+    assert response.json()["version"] == "1.9.5"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -71,7 +71,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "1.9.4"
+    assert body["version"] == "1.9.5"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -205,7 +205,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.9.4",
+        "version": "1.9.5",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -738,7 +738,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.9.4"
+    assert report["version"] == "1.9.5"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -833,7 +833,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.9.4"
+    assert manifest["current_version"] == "1.9.5"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1223,3 +1223,72 @@ def test_measurement_stops_on_guardrail_and_flags_invalid_experiment():
     assert report["experiment"]["premature"] is True
     assert report["guardrails"]["complaint_rate_ok"] is False
     assert report["performance_brief"]["recommendation"] == "stop"
+
+
+def test_automation_sandbox_binds_exact_approval_and_supports_idempotency_and_rollback():
+    parameters = {
+        "campaign_id": "campaign-123", "audience_id": "test-alpha",
+        "content_id": "content-123", "channel": "email",
+        "scheduled_for": "2026-08-10T12:00:00Z", "budget": 100,
+    }
+    approval = client.post(
+        "/api/v0/marketing/automation/approvals",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "parameters": parameters, "maker": "growth-maker",
+            "checker": "compliance-checker", "expires_at": "2027-08-10T12:00:00Z",
+        },
+    ).json()["approval"]
+    payload = {"approval_id": approval["approval_id"], "idempotency_key": "request-123", "parameters": parameters}
+    first = client.post(
+        "/api/v0/marketing/automation/dry-runs",
+        headers={"X-BitAgent-Role": "admin"}, json=payload,
+    ).json()["execution"]
+    replay = client.post(
+        "/api/v0/marketing/automation/dry-runs",
+        headers={"X-BitAgent-Role": "admin"}, json=payload,
+    ).json()["execution"]
+    rollback = client.post(
+        f"/api/v0/marketing/automation/executions/{first['execution_id']}/rollback",
+        headers={"X-BitAgent-Role": "admin"},
+    ).json()["execution"]
+
+    assert approval["maker"] != approval["checker"]
+    assert first["status"] == "dry_run_complete"
+    assert first["downstream_request_sent"] is False
+    assert replay["execution_id"] == first["execution_id"]
+    assert replay["replayed"] is True
+    assert rollback["status"] == "rolled_back"
+
+
+def test_automation_sandbox_rejects_parameter_drift_and_global_pause():
+    parameters = {
+        "campaign_id": "campaign-456", "audience_id": "test-beta",
+        "content_id": "content-456", "channel": "email",
+        "scheduled_for": "2026-08-10T12:00:00Z", "budget": 100,
+    }
+    approval = client.post(
+        "/api/v0/marketing/automation/approvals",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"parameters": parameters, "maker": "maker", "checker": "checker", "expires_at": "2027-08-10T12:00:00Z"},
+    ).json()["approval"]
+    changed = {**parameters, "budget": 101}
+    mismatch = client.post(
+        "/api/v0/marketing/automation/dry-runs",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"approval_id": approval["approval_id"], "idempotency_key": "request-456", "parameters": changed},
+    )
+    client.post(
+        "/api/v0/marketing/automation/pause?paused=true",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+    paused = client.post(
+        "/api/v0/marketing/automation/dry-runs",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"approval_id": approval["approval_id"], "idempotency_key": "request-789", "parameters": parameters},
+    )
+
+    assert mismatch.status_code == 409
+    assert mismatch.json()["detail"]["code"] == "approval_parameters_mismatch"
+    assert paused.status_code == 409
+    assert paused.json()["detail"]["code"] == "automation_paused"

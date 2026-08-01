@@ -139,6 +139,36 @@ class MeasurementRequest(BaseModel):
     minimum_sample_per_variant: int = Field(default=100, ge=10, le=1_000_000)
 
 
+class AutomationParameters(BaseModel):
+    campaign_id: str = Field(min_length=3, max_length=100)
+    audience_id: str = Field(pattern=r"^test-[A-Za-z0-9_-]+$")
+    content_id: str = Field(min_length=3, max_length=100)
+    channel: Literal["email", "social", "content", "partner", "referral", "paid"]
+    scheduled_for: datetime
+    budget: float = Field(ge=0, le=1000)
+
+
+class AutomationApprovalRequest(BaseModel):
+    parameters: AutomationParameters
+    maker: str = Field(min_length=2, max_length=100)
+    checker: str = Field(min_length=2, max_length=100)
+    expires_at: datetime
+
+    @model_validator(mode="after")
+    def maker_checker_separation(self):
+        if self.maker == self.checker:
+            raise ValueError("maker and checker must be different")
+        if self.expires_at <= datetime.now(UTC):
+            raise ValueError("approval must expire in the future")
+        return self
+
+
+class SandboxExecutionRequest(BaseModel):
+    approval_id: str = Field(min_length=3, max_length=100)
+    idempotency_key: str = Field(min_length=8, max_length=100)
+    parameters: AutomationParameters
+
+
 def build_measurement(path: str, request: MeasurementRequest) -> dict:
     report_id = str(uuid4())
     def rate(numerator: int, denominator: int) -> float | None:
@@ -356,6 +386,31 @@ def _connect(path: str) -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS marketing_approvals (
+            approval_id TEXT PRIMARY KEY, created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL, maker TEXT NOT NULL, checker TEXT NOT NULL,
+            parameters_json TEXT NOT NULL, parameters_hash TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS marketing_executions (
+            execution_id TEXT PRIMARY KEY, approval_id TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
+            status TEXT NOT NULL, parameters_hash TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS marketing_control "
+        "(singleton INTEGER PRIMARY KEY CHECK(singleton=1), paused INTEGER NOT NULL)"
+    )
+    connection.execute(
+        "INSERT OR IGNORE INTO marketing_control(singleton,paused) VALUES(1,0)"
+    )
     return connection
 
 
@@ -399,3 +454,74 @@ def create_plan(path: str, request: CampaignPlanRequest) -> dict:
     }
     plan["audit"] = record_event(path, "plan_created", plan_id, plan)
     return plan
+
+
+def create_automation_approval(path: str, request: AutomationApprovalRequest) -> dict:
+    approval_id = str(uuid4())
+    created_at = datetime.now(UTC).isoformat()
+    parameters_json = _canonical(request.parameters.model_dump(mode="json"))
+    parameters_hash = hashlib.sha256(parameters_json.encode()).hexdigest()
+    with _connect(path) as connection:
+        connection.execute(
+            "INSERT INTO marketing_approvals VALUES(?,?,?,?,?,?,?)",
+            (approval_id, created_at, request.expires_at.isoformat(), request.maker,
+             request.checker, parameters_json, parameters_hash),
+        )
+    receipt = {
+        "approval_id": approval_id, "created_at": created_at,
+        "expires_at": request.expires_at.isoformat(), "maker": request.maker,
+        "checker": request.checker, "parameters_hash": parameters_hash,
+        "scope": "sandbox_test_audience_only",
+    }
+    receipt["audit"] = record_event(path, "automation_approved", approval_id, receipt)
+    return receipt
+
+
+def set_automation_pause(path: str, paused: bool) -> dict:
+    with _connect(path) as connection:
+        connection.execute("UPDATE marketing_control SET paused=? WHERE singleton=1", (paused,))
+    audit = record_event(path, "automation_paused" if paused else "automation_resumed", "global", {"paused": paused})
+    return {"paused": paused, "audit": audit}
+
+
+def execute_sandbox(path: str, request: SandboxExecutionRequest) -> tuple[int, dict]:
+    supplied_json = _canonical(request.parameters.model_dump(mode="json"))
+    supplied_hash = hashlib.sha256(supplied_json.encode()).hexdigest()
+    with _connect(path) as connection:
+        paused = bool(connection.execute("SELECT paused FROM marketing_control WHERE singleton=1").fetchone()["paused"])
+        approval = connection.execute("SELECT * FROM marketing_approvals WHERE approval_id=?", (request.approval_id,)).fetchone()
+        existing = connection.execute("SELECT * FROM marketing_executions WHERE idempotency_key=?", (request.idempotency_key,)).fetchone()
+        if existing:
+            return 200, {"execution_id": existing["execution_id"], "status": existing["status"], "replayed": True}
+        if paused:
+            return 409, {"code": "automation_paused"}
+        if not approval:
+            return 404, {"code": "approval_not_found"}
+        if datetime.fromisoformat(approval["expires_at"]) <= datetime.now(UTC):
+            return 409, {"code": "approval_expired"}
+        if approval["parameters_hash"] != supplied_hash:
+            return 409, {"code": "approval_parameters_mismatch"}
+        execution_id = str(uuid4())
+        connection.execute(
+            "INSERT INTO marketing_executions VALUES(?,?,?,?,?,?)",
+            (execution_id, request.approval_id, request.idempotency_key,
+             datetime.now(UTC).isoformat(), "dry_run_complete", supplied_hash),
+        )
+    result = {
+        "execution_id": execution_id, "status": "dry_run_complete",
+        "connector": "sandbox", "downstream_request_sent": False,
+        "test_audience": True, "rollback_available": True, "replayed": False,
+    }
+    result["audit"] = record_event(path, "sandbox_dry_run", execution_id, result)
+    return 201, result
+
+
+def rollback_sandbox(path: str, execution_id: str) -> tuple[int, dict]:
+    with _connect(path) as connection:
+        row = connection.execute("SELECT status FROM marketing_executions WHERE execution_id=?", (execution_id,)).fetchone()
+        if not row:
+            return 404, {"code": "execution_not_found"}
+        connection.execute("UPDATE marketing_executions SET status='rolled_back' WHERE execution_id=?", (execution_id,))
+    result = {"execution_id": execution_id, "status": "rolled_back", "downstream_request_sent": False}
+    result["audit"] = record_event(path, "sandbox_rolled_back", execution_id, result)
+    return 200, result

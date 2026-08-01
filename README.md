@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.9.4 — Marketing Measurement**
+Current release: **1.9.5 — Marketing Automation Sandbox**
 
 ## What version 0 shows
 
@@ -172,6 +172,7 @@ answers score zero and are never omitted from the overall result.
 | 1.9.2 | Lifecycle retention, adoption, onboarding, and re-engagement plans | Current |
 | 1.9.3 | Multi-channel variants, compliance checks, and campaign calendar | Current |
 | 1.9.4 | Funnel reporting, attribution boundaries, experiments, and briefs | Current |
+| 1.9.5 | Exact approvals, test audiences, dry runs, rollback, and pause | Current |
 
 ## Project documents
 
