@@ -83,8 +83,9 @@ from app.readiness import (
     uat_readiness,
 )
 from app.xima import EvidenceEnvelope, ingest_evidence, replay_evidence, source_health, verify_xima_chain
+from app.xima_operations import OperationsAnalysisRequest, analyze_operations
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -134,7 +135,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA Evidence Platform",
+        "release": "XIMA Operations Intelligence",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -401,6 +402,15 @@ async def xima_audit_verify(
 ):
     authorize("view_audit", role)
     return {"version": VERSION, **verify_xima_chain(settings.evidence_db_path)}
+
+
+@app.post("/api/v0/xima/agents/operations/analyze")
+async def xima_operations_analyze(
+    request: OperationsAnalysisRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "analysis": analyze_operations(request)}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:

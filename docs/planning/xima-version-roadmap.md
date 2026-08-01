@@ -13,7 +13,7 @@ training, or steering approval as software features.
 | Version | Focus | Exit result | Status |
 |---|---|---|---|
 | `2.0.0` | Evidence platform | Versioned multi-domain evidence contracts, lineage, freshness, quality, tenant isolation, source health, and replay | Complete |
-| `2.1.0` | Operations intelligence | Dependency, error, latency, queue, worker, capacity, deduplication, incident, and runbook analysis | Planned |
+| `2.1.0` | Operations intelligence | Dependency, error, latency, queue, worker, capacity, deduplication, incident, and runbook analysis | Complete |
 | `2.2.0` | Market and risk | Spread, depth, volatility, exposure, concentration, abnormal activity, limit explanations, and market-quality brief | Planned |
 | `2.3.0` | Treasury and reconciliation | Assets, liabilities, wallet thresholds, obligations, reconciliation exceptions, aging, and treasury brief | Planned |
 | `2.4.0` | AML and fraud | Transparent case priority, linked-account and behavior evidence, transaction risk packs, notes, feedback, and queue brief | Planned |

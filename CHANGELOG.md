@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.1.0] - 2026-08-01
+
+- Added deterministic service dependency, error, latency, and capacity analysis.
+- Added queue backlog/age and worker availability/heartbeat findings with stable deduplication keys.
+- Added cited runbook guidance, similar-incident references, and fail-closed stale/conflicting evidence handling.
+
 ## [2.0.0] - 2026-08-01
 
 - Added tenant-scoped, versioned normalized evidence contracts for every XIMA domain.

@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.0.0"
+    assert response.json()["version"] == "2.1.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.0.0"
+    assert body["version"] == "2.1.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.0.0",
+        "version": "2.1.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.0.0"
+    assert report["version"] == "2.1.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.0.0"
+    assert manifest["current_version"] == "2.1.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1488,3 +1488,66 @@ def test_xima_evidence_quality_fails_closed_before_persistence():
     assert response.json()["detail"]["code"] == "evidence_quality_failed"
     assert response.json()["detail"]["quality"]["missing_fields"] == ["liabilities"]
     assert audit["records"] == 0
+
+
+def test_xima_operations_agent_correlates_service_queue_worker_and_capacity_findings():
+    request = {
+        "tenant_id": "exchange-a", "observed_at": datetime.now(UTC).isoformat(),
+        "evidence_refs": ["evidence-service", "evidence-queue", "evidence-worker"],
+        "owner": "operations-on-call", "evidence_fresh": True,
+        "conflicting_fields": [],
+        "services": [{
+            "name": "withdrawal-api", "error_rate_percent": 6.2,
+            "p95_latency_ms": 2500, "capacity_used_percent": 92,
+            "dependencies_healthy": False,
+        }],
+        "queues": [{
+            "name": "withdrawal-broadcast", "backlog": 1200,
+            "oldest_age_seconds": 900, "throughput_per_minute": 2.5,
+        }],
+        "workers": [{
+            "name": "broadcast-workers", "heartbeat_age_seconds": 180,
+            "available_workers": 0,
+        }],
+        "similar_incident_ids": ["INC-104"],
+    }
+    first = client.post(
+        "/api/v0/xima/agents/operations/analyze",
+        headers={"X-BitAgent-Role": "operator"}, json=request,
+    ).json()["analysis"]
+    second = client.post(
+        "/api/v0/xima/agents/operations/analyze",
+        headers={"X-BitAgent-Role": "operator"}, json=request,
+    ).json()["analysis"]
+
+    assert first["status"] == "ready"
+    assert first["severity"] == "critical"
+    assert first["confidence"] == "high"
+    assert {item["type"] for item in first["findings"]} == {"service", "queue", "worker"}
+    assert first["incident_key"] == second["incident_key"]
+    assert first["similar_incident_ids"] == ["INC-104"]
+    assert first["runbook"]["section"] == "19"
+    assert first["action_executed"] is False
+
+
+def test_xima_operations_agent_blocks_stale_or_conflicting_evidence():
+    result = client.post(
+        "/api/v0/xima/agents/operations/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": datetime.now(UTC).isoformat(),
+            "evidence_refs": ["stale-evidence"], "owner": "operations",
+            "evidence_fresh": False, "conflicting_fields": ["queue.backlog"],
+            "services": [{
+                "name": "api", "error_rate_percent": 0,
+                "p95_latency_ms": 10, "capacity_used_percent": 10,
+                "dependencies_healthy": True,
+            }],
+        },
+    ).json()["analysis"]
+
+    assert result["status"] == "blocked"
+    assert result["severity"] == "unknown"
+    assert result["confidence"] == "none"
+    assert result["findings"] == []
+    assert result["action_executed"] is False
