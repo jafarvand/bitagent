@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.10.0] - 2026-08-01
+
+- Added tenant-scoped executive briefs across operations, market/risk, treasury, AML/fraud, security, and support.
+- Added cross-domain severity ordering, owner/action priorities, KPI sections, and deduplicated evidence references.
+- Added fail-closed required-domain coverage and freshness gates that suppress conclusions when evidence is incomplete.
+
 ## [2.9.0] - 2026-08-01
 
 - Added exact low-risk local action previews with evidence, expected effect, timeout, and rollback plan.

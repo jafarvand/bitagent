@@ -22,6 +22,7 @@ training, or steering approval as software features.
 | `2.7.0` | Governance and evaluation | Domain/data/environment/risk policy, registry, adversarial checks, quality/latency/cost evaluation, fallback, and escalation | Complete |
 | `2.8.0` | Shadow pilot and reliability | Outcome comparison, alert precision/recall, duplicate/noise reporting, load/soak/failover/restore evidence, and readiness gates | Complete |
 | `2.9.0` | General action sandbox | Risk-classified previews, maker-checker separation, exact signed authorization, expiry, idempotency, timeout, result verification, rollback, and kill switch | Complete |
+| `2.10.0` | Executive intelligence | Cross-domain coverage, KPIs, prioritized risk/incident summary, evidence, owners, and next actions | Complete |
 
 ## Definition of software completion
 

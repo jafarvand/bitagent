@@ -101,8 +101,9 @@ from app.xima_actions import (
     ActionAuthorizationRequest, ActionExecutionRequest, ActionPreviewRequest,
     authorize_preview, create_preview, execute_action, rollback_action, set_kill_switch,
 )
+from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.9.0"
+VERSION = "2.10.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -152,7 +153,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA General Action Sandbox",
+        "release": "XIMA Cross-Domain Executive Intelligence",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -612,6 +613,15 @@ async def xima_action_kill_switch(
 ):
     authorize_xima_actions(role)
     return {"version": VERSION, **set_kill_switch(settings.evidence_db_path, paused)}
+
+
+@app.post("/api/v0/xima/agents/executive/brief")
+async def xima_executive_brief(
+    request: ExecutiveBriefRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "brief": build_executive_brief(request)}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:

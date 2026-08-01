@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.9.0 — XIMA General Action Sandbox**
+Current release: **2.10.0 — XIMA Cross-Domain Executive Intelligence**
 
 ## What version 0 shows
 
@@ -183,7 +183,8 @@ answers score zero and are never omitted from the overall result.
 | 2.6.0 | Support intelligence and governed cited knowledge | Complete |
 | 2.7.0 | Cross-domain policy, registry, adversarial and quality evaluation | Complete |
 | 2.8.0 | Shadow outcomes, reliability evidence, and readiness gates | Complete |
-| 2.9.0 | General maker-checker action sandbox and rollback | Current |
+| 2.9.0 | General maker-checker action sandbox and rollback | Complete |
+| 2.10.0 | Cross-domain executive priorities, coverage, KPI and evidence brief | Current |
 
 ## Project documents
 

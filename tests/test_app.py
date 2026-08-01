@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.9.0"
+    assert response.json()["version"] == "2.10.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.9.0"
+    assert body["version"] == "2.10.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.9.0",
+        "version": "2.10.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.9.0"
+    assert report["version"] == "2.10.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.9.0"
+    assert manifest["current_version"] == "2.10.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -2270,3 +2270,64 @@ def test_xima_action_sandbox_partial_failure_timeout_and_signature_controls():
     assert timeout["status"] == "timed_out"
     assert timeout["rollback_available"] is False
     assert timeout_rollback.status_code == 409
+
+
+def test_xima_executive_agent_prioritizes_complete_fresh_cross_domain_evidence():
+    observed_at = datetime.now(UTC).isoformat()
+    domains = [
+        ("operations", "warning", "Withdrawal queue warning", "Review queue"),
+        ("market_risk", "healthy", "Market quality healthy", "Continue monitoring"),
+        ("treasury", "critical", "BTC reconciliation deficit", "Escalate reconciliation"),
+        ("aml_fraud", "medium", "Cases require review", "Review ranked cases"),
+        ("security", "healthy", "No correlated incidents", "Continue monitoring"),
+        ("support", "normal", "Support SLA normal", "Continue monitoring"),
+    ]
+    result = client.post(
+        "/api/v0/xima/agents/executive/brief",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "reporting_period": "2026-08-01",
+            "freshness_limit_seconds": 300,
+            "domains": [
+                {"domain": domain, "status": "ready", "severity": severity,
+                 "observed_at": observed_at, "evidence_refs": [f"{domain}-evidence"],
+                 "owner": f"{domain}-owner", "headline": headline,
+                 "metrics": {"sample_kpi": 1}, "recommended_next_action": action}
+                for domain, severity, headline, action in domains
+            ],
+        },
+    ).json()["brief"]
+
+    assert result["status"] == "ready"
+    assert result["overall_severity"] == "critical"
+    assert result["confidence"] == "high"
+    assert result["priorities"][0]["domain"] == "treasury"
+    assert result["recommended_next_action"] == "Escalate reconciliation"
+    assert result["coverage"]["complete"] is True
+    assert len(result["evidence_refs"]) == 6
+    assert result["action_executed"] is False
+
+
+def test_xima_executive_agent_blocks_incomplete_domain_coverage():
+    result = client.post(
+        "/api/v0/xima/agents/executive/brief",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "reporting_period": "2026-08-01",
+            "domains": [{
+                "domain": "operations", "status": "ready", "severity": "critical",
+                "observed_at": datetime.now(UTC).isoformat(),
+                "evidence_refs": ["operations-evidence"], "owner": "operations",
+                "headline": "Critical operation", "metrics": {},
+                "recommended_next_action": "Escalate",
+            }],
+        },
+    ).json()["brief"]
+
+    assert result["status"] == "blocked"
+    assert result["overall_severity"] == "unknown"
+    assert result["confidence"] == "none"
+    assert result["priorities"] == []
+    assert result["coverage"]["missing_domains"] == [
+        "aml_fraud", "market_risk", "security", "support", "treasury"
+    ]
