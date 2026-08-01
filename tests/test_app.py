@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 from copy import deepcopy
+from datetime import UTC, datetime
 
 import pytest
 import httpx
@@ -41,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.10.0"
+    assert response.json()["version"] == "2.0.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -71,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "1.10.0"
+    assert body["version"] == "2.0.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -205,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.10.0",
+        "version": "2.0.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -738,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.10.0"
+    assert report["version"] == "2.0.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -833,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.10.0"
+    assert manifest["current_version"] == "2.0.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1417,3 +1418,73 @@ def test_controlled_pilot_rejects_expired_and_parameter_drifted_approvals():
     assert drifted.status_code == 409
     assert drifted.json()["detail"]["code"] == "approval_parameters_mismatch"
     assert expired_approval.status_code == 422
+
+
+def test_xima_evidence_is_versioned_tenant_scoped_replayable_and_hash_verified():
+    payload = {
+        "tenant_id": "exchange-a", "source_id": "ops.queue-primary",
+        "domain": "operations", "schema_name": "queue.health",
+        "schema_version": "1.0.0", "data_class": "internal",
+        "observed_at": datetime.now(UTC).isoformat(), "freshness_sla_seconds": 120,
+        "owner": "operations", "lineage": ["exchange-api:/queues/primary"],
+        "required_fields": ["backlog", "oldest_age_seconds"],
+        "payload": {"backlog": 12, "oldest_age_seconds": 45},
+    }
+    denied = client.post(
+        "/api/v0/xima/evidence", headers={"X-BitAgent-Role": "operator"}, json=payload,
+    )
+    created_response = client.post(
+        "/api/v0/xima/evidence", headers={"X-BitAgent-Role": "admin"}, json=payload,
+    )
+    assert created_response.status_code == 201
+    created = created_response.json()["evidence"]
+    health = client.get(
+        "/api/v0/xima/sources/health?tenant_id=exchange-a",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+    replay = client.get(
+        f"/api/v0/xima/evidence/{created['evidence_id']}/replay?tenant_id=exchange-a",
+        headers={"X-BitAgent-Role": "admin"},
+    ).json()["evidence"]
+    cross_tenant = client.get(
+        f"/api/v0/xima/evidence/{created['evidence_id']}/replay?tenant_id=exchange-b",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+    audit = client.get(
+        "/api/v0/xima/audit/verify", headers={"X-BitAgent-Role": "auditor"},
+    ).json()
+
+    assert denied.status_code == 403
+    assert created["quality"]["valid"] is True
+    assert created["quality"]["fresh"] is True
+    assert health["status"] == "healthy"
+    assert health["sources"][0]["schema"] == {"name": "queue.health", "version": "1.0.0"}
+    assert replay["payload"] == payload["payload"]
+    assert replay["lineage"] == payload["lineage"]
+    assert cross_tenant.status_code == 404
+    assert audit["valid"] is True
+    assert audit["records"] == 1
+
+
+def test_xima_evidence_quality_fails_closed_before_persistence():
+    response = client.post(
+        "/api/v0/xima/evidence",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "tenant_id": "exchange-a", "source_id": "treasury.summary",
+            "domain": "treasury", "schema_name": "treasury.summary",
+            "schema_version": "1.0.0", "data_class": "restricted",
+            "observed_at": datetime.now(UTC).isoformat(), "freshness_sla_seconds": 60,
+            "owner": "treasury", "lineage": ["ledger:aggregate"],
+            "required_fields": ["assets", "liabilities"],
+            "payload": {"assets": {"BTC": "1.0"}},
+        },
+    )
+    audit = client.get(
+        "/api/v0/xima/audit/verify", headers={"X-BitAgent-Role": "auditor"},
+    ).json()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "evidence_quality_failed"
+    assert response.json()["detail"]["quality"]["missing_fields"] == ["liabilities"]
+    assert audit["records"] == 0

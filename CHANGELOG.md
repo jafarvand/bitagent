@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.0.0] - 2026-08-01
+
+- Added tenant-scoped, versioned normalized evidence contracts for every XIMA domain.
+- Added append-only lineage and payload receipts with independent SHA-256 chain verification.
+- Added required-field quality gates, freshness SLAs, per-source health, and exact evidence replay.
+
 ## [1.10.0] - 2026-08-01
 
 - Added exact-parameter maker-checker approvals for tightly bounded pilot campaigns.

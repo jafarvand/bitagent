@@ -15,6 +15,7 @@ ROLE_CAPABILITIES = {
         "use_readonly_chat",
         "create_marketing_plan",
         "view_marketing",
+        "view_xima",
     },
     "auditor": {
         "view_aggregate",
@@ -25,6 +26,7 @@ ROLE_CAPABILITIES = {
         "view_chat_audit",
         "view_marketing",
         "view_marketing_audit",
+        "view_xima",
     },
     "admin": {
         "view_aggregate",
@@ -39,6 +41,8 @@ ROLE_CAPABILITIES = {
         "view_marketing",
         "view_marketing_audit",
         "manage_marketing_automation",
+        "view_xima",
+        "ingest_xima_evidence",
     },
 }
 

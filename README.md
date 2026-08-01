@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **1.10.0 — Marketing Controlled Pilot**
+Current release: **2.0.0 — XIMA Evidence Platform**
 
 ## What version 0 shows
 
@@ -173,13 +173,24 @@ answers score zero and are never omitted from the overall result.
 | 1.9.3 | Multi-channel variants, compliance checks, and campaign calendar | Complete |
 | 1.9.4 | Funnel reporting, attribution boundaries, experiments, and briefs | Complete |
 | 1.9.5 | Exact approvals, test audiences, dry runs, rollback, and pause | Complete |
-| 1.10.0 | Limited controlled scheduling, cancellation, and monitoring | Current |
+| 1.10.0 | Limited controlled scheduling, cancellation, and monitoring | Complete |
+| 2.0.0 | Multi-domain evidence contracts, lineage, freshness, quality, and replay | Current |
+| 2.1.0 | Operations dependency, error, queue, capacity, and incident intelligence | Planned |
+| 2.2.0 | Liquidity, volatility, exposure, concentration, and market quality | Planned |
+| 2.3.0 | Treasury, liabilities, wallet thresholds, reconciliation, and obligations | Planned |
+| 2.4.0 | Transparent AML/fraud prioritization and evidence packs | Planned |
+| 2.5.0 | Correlated security intelligence and escalation | Planned |
+| 2.6.0 | Support intelligence and governed cited knowledge | Planned |
+| 2.7.0 | Cross-domain policy, registry, adversarial and quality evaluation | Planned |
+| 2.8.0 | Shadow outcomes, reliability evidence, and readiness gates | Planned |
+| 2.9.0 | General maker-checker action sandbox and rollback | Planned |
 
 ## Project documents
 
 - [MVP plan and task board](docs/planning/mvp-v0.md)
 - [Approved 16-week project plan](docs/planning/project-plan.md)
 - [Marketing Growth Agent plan and infographic](docs/planning/marketing-growth-agent.md)
+- [Remaining XIMA version roadmap](docs/planning/xima-version-roadmap.md)
 - [Master operations runbook](docs/runbooks/master-runbook.md)
 - [Architecture](docs/architecture/version-0.md)
 - [API contract and Postman collection](docs/api/)

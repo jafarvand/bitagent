@@ -82,8 +82,9 @@ from app.readiness import (
     security_self_test,
     uat_readiness,
 )
+from app.xima import EvidenceEnvelope, ingest_evidence, replay_evidence, source_health, verify_xima_chain
 
-VERSION = "1.10.0"
+VERSION = "2.0.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -133,7 +134,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Marketing Controlled Pilot",
+        "release": "XIMA Evidence Platform",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -354,6 +355,52 @@ async def features(
         for state in ("available", "partial", "missing")
     }
     return {"version": VERSION, "counts": counts, "items": FEATURES}
+
+
+@app.post("/api/v0/xima/evidence", status_code=201)
+async def xima_evidence_ingest(
+    request: EvidenceEnvelope,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("ingest_xima_evidence", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "evidence_ingest_denied"})
+    status_code, result = ingest_evidence(settings.evidence_db_path, request)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "evidence": result}
+
+
+@app.get("/api/v0/xima/sources/health")
+async def xima_source_health(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, **source_health(settings.evidence_db_path, tenant_id)}
+
+
+@app.get("/api/v0/xima/evidence/{evidence_id}/replay")
+async def xima_evidence_replay(
+    evidence_id: str,
+    tenant_id: str = Query(min_length=1, max_length=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("ingest_xima_evidence", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "evidence_replay_denied"})
+    status_code, result = replay_evidence(settings.evidence_db_path, tenant_id, evidence_id)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "evidence": result}
+
+
+@app.get("/api/v0/xima/audit/verify")
+async def xima_audit_verify(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    return {"version": VERSION, **verify_xima_chain(settings.evidence_db_path)}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:
