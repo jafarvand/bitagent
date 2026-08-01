@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.10.0 — XIMA Cross-Domain Executive Intelligence**
+Current release: **2.11.0 — XIMA Secure Delivery and Resilient Gateway**
 
 ## What version 0 shows
 
@@ -184,7 +184,8 @@ answers score zero and are never omitted from the overall result.
 | 2.7.0 | Cross-domain policy, registry, adversarial and quality evaluation | Complete |
 | 2.8.0 | Shadow outcomes, reliability evidence, and readiness gates | Complete |
 | 2.9.0 | General maker-checker action sandbox and rollback | Complete |
-| 2.10.0 | Cross-domain executive priorities, coverage, KPI and evidence brief | Current |
+| 2.10.0 | Cross-domain executive priorities, coverage, KPI and evidence brief | Complete |
+| 2.11.0 | Bounded retry/circuit telemetry, secure CI, and platform operations baseline | Current |
 
 ## Project documents
 

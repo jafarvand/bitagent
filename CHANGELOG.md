@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.11.0] - 2026-08-01
+
+- Added bounded exchange read retries with exponential backoff, retry classification, and circuit breaking.
+- Added credential-free integration telemetry for successes, failures, retries, circuit state, and configuration.
+- Added CI test, dependency, secret and container scanning plus explicit environment, logging, retention, secrets and release controls.
+
 ## [2.10.0] - 2026-08-01
 
 - Added tenant-scoped executive briefs across operations, market/risk, treasury, AML/fraud, security, and support.

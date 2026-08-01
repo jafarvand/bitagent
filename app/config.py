@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     exchange_bot_secret: str = ""
     exchange_bot_service_keys: str = ""
     exchange_timeout_seconds: float = 10.0
+    exchange_max_retries: int = 2
+    exchange_retry_base_seconds: float = 0.25
+    exchange_circuit_failure_threshold: int = 3
+    exchange_circuit_recovery_seconds: float = 30.0
     bitagent_default_market: str = "BTC_USDT"
     withdrawal_pending_warning_threshold: int = 25
     withdrawal_pending_critical_threshold: int = 100

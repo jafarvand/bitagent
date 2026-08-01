@@ -103,7 +103,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.10.0"
+VERSION = "2.11.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -153,7 +153,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA Cross-Domain Executive Intelligence",
+        "release": "XIMA Secure Delivery and Resilient Gateway",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -622,6 +622,15 @@ async def xima_executive_brief(
 ):
     authorize("view_xima", role)
     return {"version": VERSION, "brief": build_executive_brief(request)}
+
+
+@app.get("/api/v0/xima/integrations/exchange/health")
+async def xima_exchange_integration_health(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "source_id": "exchange-api",
+            "health": exchange_client.health_snapshot()}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:

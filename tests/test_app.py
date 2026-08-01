@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.10.0"
+    assert response.json()["version"] == "2.11.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.10.0"
+    assert body["version"] == "2.11.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.10.0",
+        "version": "2.11.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.10.0"
+    assert report["version"] == "2.11.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.10.0"
+    assert manifest["current_version"] == "2.11.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -2331,3 +2331,91 @@ def test_xima_executive_agent_blocks_incomplete_domain_coverage():
     assert result["coverage"]["missing_domains"] == [
         "aml_fraud", "market_risk", "security", "support", "treasury"
     ]
+
+
+def test_exchange_gateway_retries_only_retryable_failures_and_reports_safe_telemetry(monkeypatch):
+    monkeypatch.setattr(settings, "exchange_bot_key_id", "pilot-key")
+    monkeypatch.setattr(settings, "exchange_bot_secret", "test-secret")
+    monkeypatch.setattr(settings, "exchange_max_retries", 2)
+    monkeypatch.setattr(settings, "exchange_retry_base_seconds", 0)
+    outcomes = [
+        httpx.Response(503, request=httpx.Request("GET", "https://exchange.test/health")),
+        httpx.Response(200, json={"status": "healthy"},
+                       request=httpx.Request("GET", "https://exchange.test/health")),
+    ]
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, *args, **kwargs):
+            return outcomes.pop(0)
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
+    exchange = ExchangeClient()
+    result = asyncio.run(exchange.get("/api/bot/health"))
+    health = exchange.health_snapshot()
+
+    assert result == {"status": "healthy"}
+    assert health["requests"] == 1
+    assert health["successes"] == 1
+    assert health["failures"] == 0
+    assert health["retries"] == 1
+    assert health["circuit"] == "closed"
+    assert health["read_only_methods"] == ["GET"]
+    assert health["credentials_exposed"] is False
+    assert "test-secret" not in str(health)
+
+
+def test_exchange_gateway_opens_circuit_after_bounded_failures(monkeypatch):
+    monkeypatch.setattr(settings, "exchange_bot_key_id", "pilot-key")
+    monkeypatch.setattr(settings, "exchange_bot_secret", "test-secret")
+    monkeypatch.setattr(settings, "exchange_max_retries", 0)
+    monkeypatch.setattr(settings, "exchange_circuit_failure_threshold", 1)
+    monkeypatch.setattr(settings, "exchange_circuit_recovery_seconds", 30)
+    calls = 0
+
+    class FailingAsyncClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            raise httpx.ConnectError("upstream unavailable")
+
+    monkeypatch.setattr(httpx, "AsyncClient", FailingAsyncClient)
+    exchange = ExchangeClient()
+    with pytest.raises(Exception, match="upstream unavailable"):
+        asyncio.run(exchange.get("/api/bot/health"))
+    with pytest.raises(Exception, match="circuit breaker is open"):
+        asyncio.run(exchange.get("/api/bot/health"))
+    health = exchange.health_snapshot()
+
+    assert calls == 1
+    assert health["failures"] == 1
+    assert health["circuit"] == "open"
+    assert health["last_error_type"] == "ConnectError"
+
+
+def test_exchange_integration_health_endpoint_is_credential_free():
+    health = client.get(
+        "/api/v0/xima/integrations/exchange/health",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()["health"]
+
+    assert health["read_only_methods"] == ["GET"]
+    assert health["credentials_exposed"] is False
+    assert "secret" not in str(health).lower()

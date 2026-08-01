@@ -18,6 +18,14 @@ class ExchangeAPIError(RuntimeError):
 class ExchangeClient:
     """Read-only API-contract v0.2 connector."""
 
+    def __init__(self):
+        self._consecutive_failures = 0
+        self._circuit_open_until = 0.0
+        self._metrics = {
+            "requests": 0, "successes": 0, "failures": 0, "retries": 0,
+            "last_success_at": None, "last_failure_at": None, "last_error_type": None,
+        }
+
     @staticmethod
     def _normalized_path(path: str) -> str:
         parsed = urlsplit(path)
@@ -97,19 +105,58 @@ class ExchangeClient:
         url = f"{settings.exchange_api_base_url.rstrip('/')}{normalized_path}"
         if query_string:
             url = f"{url}?{query_string}"
-        try:
-            async with httpx.AsyncClient(
-                timeout=settings.exchange_timeout_seconds,
-                follow_redirects=False,
-            ) as client:
-                response = await client.get(
-                    url,
-                    headers=self._headers("GET", normalized_path, query_string),
+        if time.monotonic() < self._circuit_open_until:
+            raise ExchangeAPIError("Exchange circuit breaker is open")
+        self._metrics["requests"] += 1
+        last_error = None
+        for attempt in range(settings.exchange_max_retries + 1):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=settings.exchange_timeout_seconds,
+                    follow_redirects=False,
+                ) as client:
+                    response = await client.get(
+                        url,
+                        headers=self._headers("GET", normalized_path, query_string),
+                    )
+                response.raise_for_status()
+                result = response.json()
+                self._consecutive_failures = 0
+                self._circuit_open_until = 0.0
+                self._metrics["successes"] += 1
+                self._metrics["last_success_at"] = str(int(time.time()))
+                return result
+            except (httpx.HTTPError, ValueError) as exc:
+                last_error = exc
+                status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+                retryable = status is None or status == 429 or status >= 500
+                if not retryable or attempt >= settings.exchange_max_retries:
+                    break
+                self._metrics["retries"] += 1
+                retry_after = (
+                    float(exc.response.headers.get("Retry-After", 0))
+                    if isinstance(exc, httpx.HTTPStatusError) else 0
                 )
-            response.raise_for_status()
-            return response.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            raise ExchangeAPIError(str(exc)) from exc
+                delay = max(retry_after, settings.exchange_retry_base_seconds * (2 ** attempt))
+                await asyncio.sleep(min(delay, 5.0))
+        self._consecutive_failures += 1
+        self._metrics["failures"] += 1
+        self._metrics["last_failure_at"] = str(int(time.time()))
+        self._metrics["last_error_type"] = type(last_error).__name__
+        if self._consecutive_failures >= settings.exchange_circuit_failure_threshold:
+            self._circuit_open_until = time.monotonic() + settings.exchange_circuit_recovery_seconds
+        raise ExchangeAPIError(str(last_error)) from last_error
+
+    def health_snapshot(self) -> dict:
+        circuit_open = time.monotonic() < self._circuit_open_until
+        return {
+            **self._metrics, "circuit": "open" if circuit_open else "closed",
+            "consecutive_failures": self._consecutive_failures,
+            "timeout_seconds": settings.exchange_timeout_seconds,
+            "max_retries": settings.exchange_max_retries,
+            "read_only_methods": ["GET"], "credentials_exposed": False,
+        }
 
 
 exchange_client = ExchangeClient()
+import asyncio
