@@ -50,8 +50,10 @@ from app.marketing import (
     EVENT_TAXONOMY,
     GOVERNANCE,
     LIFECYCLE_STAGES,
+    RetentionPlanRequest,
     audit_events,
     build_acquisition_plan,
+    build_retention_plan,
     create_plan,
 )
 from app.ollama import OllamaError, ollama_client
@@ -65,7 +67,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.9.1"
+VERSION = "1.9.2"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -115,7 +117,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Marketing Acquisition Planner",
+        "release": "Marketing Retention Planner",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -170,6 +172,20 @@ async def acquisition_plan(
     return {
         "version": VERSION,
         "plan": build_acquisition_plan(settings.evidence_db_path, request),
+    }
+
+
+@app.post("/api/v0/marketing/retention-plans", status_code=201)
+async def retention_plan(
+    request: RetentionPlanRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("create_marketing_plan", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "marketing_role_denied"})
+    return {
+        "version": VERSION,
+        "plan": build_retention_plan(settings.evidence_db_path, request),
     }
 
 

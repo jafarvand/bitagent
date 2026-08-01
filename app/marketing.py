@@ -80,6 +80,20 @@ class AcquisitionPlanRequest(BaseModel):
     owner: str = Field(min_length=2, max_length=100)
 
 
+class RetentionPlanRequest(BaseModel):
+    segment: str = Field(min_length=3, max_length=200)
+    lifecycle_stage: Literal["registered", "verifying", "activating", "active", "at_risk", "dormant"]
+    tenant_id: str = Field(min_length=1, max_length=100)
+    evidence: list[str] = Field(min_length=1, max_length=20)
+    consented: bool
+    suppressed: bool
+    messages_last_7_days: int = Field(ge=0, le=1000)
+    frequency_cap_7_days: int = Field(ge=1, le=100)
+    target_metric: str = Field(min_length=2, max_length=120)
+    target_improvement_percent: float = Field(gt=0, le=100)
+    owner: str = Field(min_length=2, max_length=100)
+
+
 def build_acquisition_plan(path: str, request: AcquisitionPlanRequest) -> dict:
     plan_id = str(uuid4())
     registrations = round(
@@ -126,6 +140,47 @@ def build_acquisition_plan(path: str, request: AcquisitionPlanRequest) -> dict:
         "external_execution_enabled": False,
     }
     plan["audit"] = record_event(path, "acquisition_plan_created", plan_id, plan)
+    return plan
+
+
+def build_retention_plan(path: str, request: RetentionPlanRequest) -> dict:
+    plan_id = str(uuid4())
+    checks = {
+        "consent": request.consented,
+        "not_suppressed": not request.suppressed,
+        "within_frequency_cap": request.messages_last_7_days < request.frequency_cap_7_days,
+    }
+    eligible = all(checks.values())
+    programs = {
+        "registered": ("onboarding", "Complete verification education"),
+        "verifying": ("onboarding", "Resolve approved verification guidance gaps"),
+        "activating": ("activation", "Explain first successful use"),
+        "active": ("adoption", "Teach one relevant approved feature"),
+        "at_risk": ("retention", "Offer helpful product education"),
+        "dormant": ("reengagement", "Invite a consented return without pressure"),
+    }
+    program, message = programs[request.lifecycle_stage]
+    plan = {
+        "id": plan_id,
+        "type": "retention",
+        **request.model_dump(),
+        "program": program,
+        "content_brief": {
+            "message": message,
+            "cta": "Review approved guidance",
+            "status": "draft" if eligible else "blocked",
+            "incentive": None,
+        },
+        "eligibility": {"eligible": eligible, "checks": checks, "fail_closed": True},
+        "kpi_target": {
+            "metric": request.target_metric,
+            "improvement_percent": request.target_improvement_percent,
+        },
+        "status": "draft" if eligible else "blocked",
+        "approval_required": True,
+        "external_execution_enabled": False,
+    }
+    plan["audit"] = record_event(path, "retention_plan_created", plan_id, plan)
     return plan
 
 

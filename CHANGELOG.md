@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.9.2] - 2026-08-01
+
+- Added lifecycle-aware onboarding, adoption, retention, and re-engagement plans.
+- Added explicit consent, suppression, and frequency-cap eligibility checks.
+- Added fail-closed blocked plans for ineligible cohorts.
+
 ## [1.9.1] - 2026-08-01
 
 - Added evidence-backed acquisition planning for consented prospect segments.
