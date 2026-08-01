@@ -45,6 +45,7 @@ ROLE_CAPABILITIES = {
         "ingest_xima_evidence",
         "manage_xima_knowledge",
         "manage_xima_governance",
+        "manage_xima_actions",
     },
 }
 

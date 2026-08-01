@@ -97,8 +97,12 @@ from app.xima_governance import (
     XimaPolicyRequest, evaluate_quality, evaluate_xima_policy, register_component,
 )
 from app.xima_shadow import ShadowPilotRequest, evaluate_shadow_pilot
+from app.xima_actions import (
+    ActionAuthorizationRequest, ActionExecutionRequest, ActionPreviewRequest,
+    authorize_preview, create_preview, execute_action, rollback_action, set_kill_switch,
+)
 
-VERSION = "2.8.0"
+VERSION = "2.9.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -148,7 +152,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA Shadow Pilot and Reliability",
+        "release": "XIMA General Action Sandbox",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -548,6 +552,66 @@ async def xima_shadow_evaluate(
 ):
     authorize("view_xima", role)
     return {"version": VERSION, "evaluation": evaluate_shadow_pilot(request)}
+
+
+def authorize_xima_actions(role: str | None) -> None:
+    decision = authorize("manage_xima_actions", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "action_role_denied"})
+
+
+@app.post("/api/v0/xima/actions/previews", status_code=201)
+async def xima_action_preview(
+    request: ActionPreviewRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize_xima_actions(role)
+    return {"version": VERSION, "preview": create_preview(settings.evidence_db_path, request)}
+
+
+@app.post("/api/v0/xima/actions/authorizations", status_code=201)
+async def xima_action_authorization(
+    request: ActionAuthorizationRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize_xima_actions(role)
+    status_code, result = authorize_preview(settings.evidence_db_path, request)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "authorization": result}
+
+
+@app.post("/api/v0/xima/actions/executions", status_code=201)
+async def xima_action_execute(
+    request: ActionExecutionRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize_xima_actions(role)
+    status_code, result = execute_action(settings.evidence_db_path, request)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "execution": result}
+
+
+@app.post("/api/v0/xima/actions/executions/{execution_id}/rollback")
+async def xima_action_rollback(
+    execution_id: str,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize_xima_actions(role)
+    status_code, result = rollback_action(settings.evidence_db_path, execution_id)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "execution": result}
+
+
+@app.post("/api/v0/xima/actions/kill-switch")
+async def xima_action_kill_switch(
+    paused: bool,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize_xima_actions(role)
+    return {"version": VERSION, **set_kill_switch(settings.evidence_db_path, paused)}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:

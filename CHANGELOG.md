@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.9.0] - 2026-08-01
+
+- Added exact low-risk local action previews with evidence, expected effect, timeout, and rollback plan.
+- Added maker-checker separation and short-lived HMAC-signed authorization bound to the preview hash.
+- Added idempotent success, partial-failure and timeout simulation, result verification, rollback, audit, and a global kill switch without exchange requests.
+
 ## [2.8.0] - 2026-08-01
 
 - Added shadow outcome precision, recall, false-positive, false-negative, duplicate/noise, report-success, and latency metrics.

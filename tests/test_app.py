@@ -3,7 +3,7 @@ import hashlib
 import hmac
 import json
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import httpx
@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.8.0"
+    assert response.json()["version"] == "2.9.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.8.0"
+    assert body["version"] == "2.9.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.8.0",
+        "version": "2.9.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.8.0"
+    assert report["version"] == "2.9.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.8.0"
+    assert manifest["current_version"] == "2.9.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -2061,3 +2061,212 @@ def test_xima_shadow_pilot_remains_not_ready_for_noise_failures_and_missing_evid
     assert result["gates"]["failover"] is False
     assert result["gates"]["domain_acceptance"] is False
     assert result["missing_acceptance_roles"]
+
+
+def test_xima_action_sandbox_exact_signed_idempotent_verified_and_rollbackable():
+    preview_payload = {
+        "tenant_id": "exchange-a", "action_type": "route_test_case",
+        "target_id": "sandbox-case-1", "parameters": {"queue": "test-review"},
+        "expected_effect": "Test case appears in the sandbox review queue.",
+        "risk": "low", "environment": "staging", "evidence_refs": ["case-evidence-1"],
+        "rollback_plan": "Remove the sandbox queue entry.", "timeout_seconds": 10,
+        "requester": "operations-maker",
+    }
+    denied = client.post(
+        "/api/v0/xima/actions/previews",
+        headers={"X-BitAgent-Role": "operator"}, json=preview_payload,
+    )
+    preview = client.post(
+        "/api/v0/xima/actions/previews",
+        headers={"X-BitAgent-Role": "admin"}, json=preview_payload,
+    ).json()["preview"]
+    authorization_response = client.post(
+        "/api/v0/xima/actions/authorizations",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "preview_id": preview["preview_id"], "maker": "operations-maker",
+            "checker": "security-checker",
+            "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
+        },
+    )
+    assert authorization_response.status_code == 201
+    authorization = authorization_response.json()["authorization"]
+    execution_payload = {
+        "authorization_id": authorization["authorization_id"],
+        "authorization_token": authorization["authorization_token"],
+        "preview_hash": preview["preview_hash"], "idempotency_key": "action-request-1",
+        "simulation_outcome": "success",
+    }
+    first = client.post(
+        "/api/v0/xima/actions/executions",
+        headers={"X-BitAgent-Role": "admin"}, json=execution_payload,
+    ).json()["execution"]
+    replay = client.post(
+        "/api/v0/xima/actions/executions",
+        headers={"X-BitAgent-Role": "admin"}, json=execution_payload,
+    ).json()["execution"]
+    rollback = client.post(
+        f"/api/v0/xima/actions/executions/{first['execution_id']}/rollback",
+        headers={"X-BitAgent-Role": "admin"},
+    ).json()["execution"]
+
+    assert denied.status_code == 403
+    assert preview["exchange_request_enabled"] is False
+    assert preview["approval_required"] is True
+    assert authorization["maker"] != authorization["checker"]
+    assert authorization["preview_hash"] == preview["preview_hash"]
+    assert first["status"] == "succeeded"
+    assert first["verification"]["passed"] is True
+    assert first["exchange_request_sent"] is False
+    assert replay["execution_id"] == first["execution_id"]
+    assert replay["replayed"] is True
+    assert rollback["status"] == "rolled_back"
+    assert rollback["exchange_request_sent"] is False
+
+
+def test_xima_action_sandbox_rejects_drift_bad_separation_prohibited_actions_and_kill_switch():
+    prohibited = client.post(
+        "/api/v0/xima/actions/previews",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "tenant_id": "exchange-a", "action_type": "transfer_funds",
+            "target_id": "wallet", "parameters": {"amount": "1"},
+            "expected_effect": "Move funds", "risk": "low", "environment": "staging",
+            "evidence_refs": ["evidence"], "rollback_plan": "Reverse funds",
+            "timeout_seconds": 10, "requester": "maker",
+        },
+    )
+    preview = client.post(
+        "/api/v0/xima/actions/previews",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "tenant_id": "exchange-a", "action_type": "create_draft_task",
+            "target_id": "task-1", "parameters": {"title": "Review test"},
+            "expected_effect": "A local draft task is created.", "risk": "low",
+            "environment": "test", "evidence_refs": ["evidence"],
+            "rollback_plan": "Delete the local draft task.", "timeout_seconds": 10,
+            "requester": "maker",
+        },
+    ).json()["preview"]
+    bad_separation = client.post(
+        "/api/v0/xima/actions/authorizations",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "preview_id": preview["preview_id"], "maker": "same", "checker": "same",
+            "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
+        },
+    )
+    authorization = client.post(
+        "/api/v0/xima/actions/authorizations",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "preview_id": preview["preview_id"], "maker": "maker", "checker": "checker",
+            "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
+        },
+    ).json()["authorization"]
+    drift = client.post(
+        "/api/v0/xima/actions/executions",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "authorization_id": authorization["authorization_id"],
+            "authorization_token": authorization["authorization_token"],
+            "preview_hash": "0" * 64, "idempotency_key": "action-drift-1",
+        },
+    )
+    client.post(
+        "/api/v0/xima/actions/kill-switch?paused=true",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+    paused = client.post(
+        "/api/v0/xima/actions/executions",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "authorization_id": authorization["authorization_id"],
+            "authorization_token": authorization["authorization_token"],
+            "preview_hash": preview["preview_hash"], "idempotency_key": "action-paused-1",
+            "simulation_outcome": "partial_failure",
+        },
+    )
+
+    assert prohibited.status_code == 422
+    assert bad_separation.status_code == 422
+    assert drift.status_code == 409
+    assert drift.json()["detail"]["code"] == "preview_hash_mismatch"
+    assert paused.status_code == 409
+    assert paused.json()["detail"]["code"] == "action_kill_switch_active"
+
+
+def test_xima_action_sandbox_partial_failure_timeout_and_signature_controls():
+    def approved_action(target_id: str):
+        preview = client.post(
+            "/api/v0/xima/actions/previews",
+            headers={"X-BitAgent-Role": "admin"},
+            json={
+                "tenant_id": "exchange-a", "action_type": "send_test_notification",
+                "target_id": target_id, "parameters": {"channel": "sandbox"},
+                "expected_effect": "A sandbox notification result is recorded.",
+                "risk": "low", "environment": "test", "evidence_refs": ["test-evidence"],
+                "rollback_plan": "Remove the sandbox notification record.",
+                "timeout_seconds": 5, "requester": "maker",
+            },
+        ).json()["preview"]
+        authorization = client.post(
+            "/api/v0/xima/actions/authorizations",
+            headers={"X-BitAgent-Role": "admin"},
+            json={
+                "preview_id": preview["preview_id"], "maker": "maker", "checker": "checker",
+                "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
+            },
+        ).json()["authorization"]
+        return preview, authorization
+
+    bad_preview, bad_auth = approved_action("bad-signature")
+    invalid_signature = client.post(
+        "/api/v0/xima/actions/executions",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "authorization_id": bad_auth["authorization_id"],
+            "authorization_token": bad_auth["authorization_token"] + "tampered",
+            "preview_hash": bad_preview["preview_hash"], "idempotency_key": "bad-signature-1",
+        },
+    )
+    partial_preview, partial_auth = approved_action("partial")
+    partial = client.post(
+        "/api/v0/xima/actions/executions",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "authorization_id": partial_auth["authorization_id"],
+            "authorization_token": partial_auth["authorization_token"],
+            "preview_hash": partial_preview["preview_hash"], "idempotency_key": "partial-result-1",
+            "simulation_outcome": "partial_failure",
+        },
+    ).json()["execution"]
+    partial_rollback = client.post(
+        f"/api/v0/xima/actions/executions/{partial['execution_id']}/rollback",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+    timeout_preview, timeout_auth = approved_action("timeout")
+    timeout = client.post(
+        "/api/v0/xima/actions/executions",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "authorization_id": timeout_auth["authorization_id"],
+            "authorization_token": timeout_auth["authorization_token"],
+            "preview_hash": timeout_preview["preview_hash"], "idempotency_key": "timeout-result-1",
+            "simulation_outcome": "timeout",
+        },
+    ).json()["execution"]
+    timeout_rollback = client.post(
+        f"/api/v0/xima/actions/executions/{timeout['execution_id']}/rollback",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+
+    assert invalid_signature.status_code == 403
+    assert invalid_signature.json()["detail"]["code"] == "authorization_signature_invalid"
+    assert partial["status"] == "partial_failure"
+    assert partial["verification"]["passed"] is False
+    assert partial["rollback_available"] is True
+    assert partial_rollback.status_code == 200
+    assert timeout["status"] == "timed_out"
+    assert timeout["rollback_available"] is False
+    assert timeout_rollback.status_code == 409
