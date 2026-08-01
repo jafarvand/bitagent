@@ -53,6 +53,8 @@ from app.marketing import (
     GOVERNANCE,
     LIFECYCLE_STAGES,
     MeasurementRequest,
+    PilotApprovalRequest,
+    PilotScheduleRequest,
     RetentionPlanRequest,
     SandboxExecutionRequest,
     audit_events,
@@ -62,8 +64,12 @@ from app.marketing import (
     build_retention_plan,
     create_automation_approval,
     create_plan,
+    create_pilot_approval,
+    cancel_pilot,
     execute_sandbox,
     rollback_sandbox,
+    pilot_monitoring,
+    schedule_pilot,
     set_automation_pause,
 )
 from app.ollama import OllamaError, ollama_client
@@ -77,7 +83,7 @@ from app.readiness import (
     uat_readiness,
 )
 
-VERSION = "1.9.5"
+VERSION = "1.10.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -127,7 +133,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "Marketing Automation Sandbox",
+        "release": "Marketing Controlled Pilot",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -275,6 +281,55 @@ async def automation_pause(
     if not decision["allowed"]:
         raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
     return {"version": VERSION, **set_automation_pause(settings.evidence_db_path, paused)}
+
+
+@app.post("/api/v0/marketing/pilot/approvals", status_code=201)
+async def pilot_approval(
+    request: PilotApprovalRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_marketing_automation", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
+    return {"version": VERSION, "approval": create_pilot_approval(settings.evidence_db_path, request)}
+
+
+@app.post("/api/v0/marketing/pilot/schedules")
+async def pilot_schedule(
+    request: PilotScheduleRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_marketing_automation", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
+    status_code, result = schedule_pilot(settings.evidence_db_path, request)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "schedule": result}
+
+
+@app.post("/api/v0/marketing/pilot/schedules/{schedule_id}/cancel")
+async def pilot_cancel(
+    schedule_id: str,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_marketing_automation", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
+    status_code, result = cancel_pilot(settings.evidence_db_path, schedule_id)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "schedule": result}
+
+
+@app.get("/api/v0/marketing/pilot/monitoring")
+async def pilot_monitor(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_marketing_automation", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "automation_role_denied"})
+    return {"version": VERSION, **pilot_monitoring(settings.evidence_db_path)}
 
 
 @app.get("/api/v0/marketing/audit")

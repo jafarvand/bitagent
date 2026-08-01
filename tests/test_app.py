@@ -41,7 +41,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "1.9.5"
+    assert response.json()["version"] == "1.10.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -71,7 +71,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "1.9.5"
+    assert body["version"] == "1.10.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -205,7 +205,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "1.9.5",
+        "version": "1.10.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -738,7 +738,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "1.9.5"
+    assert report["version"] == "1.10.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -833,7 +833,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "1.9.5"
+    assert manifest["current_version"] == "1.10.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1292,3 +1292,86 @@ def test_automation_sandbox_rejects_parameter_drift_and_global_pause():
     assert mismatch.json()["detail"]["code"] == "approval_parameters_mismatch"
     assert paused.status_code == 409
     assert paused.json()["detail"]["code"] == "automation_paused"
+
+
+def test_controlled_pilot_schedules_exact_approved_parameters_and_monitors_then_cancels():
+    parameters = {
+        "campaign_id": "pilot-campaign", "audience_id": "pilot-alpha",
+        "audience_size": 250, "content_id": "approved-content", "channel": "email",
+        "scheduled_for": "2099-08-10T12:00:00Z", "budget": 200,
+        "consent_confirmed": True, "suppression_checked": True,
+        "messages_last_7_days": 1,
+    }
+    approval_response = client.post(
+        "/api/v0/marketing/pilot/approvals",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "parameters": parameters, "maker": "marketing-owner",
+            "checker": "compliance-owner", "expires_at": "2099-08-09T12:00:00Z",
+        },
+    )
+    assert approval_response.status_code == 201
+    approval = approval_response.json()["approval"]
+    payload = {
+        "approval_id": approval["approval_id"], "idempotency_key": "pilot-request-1",
+        "parameters": parameters,
+    }
+    first_response = client.post(
+        "/api/v0/marketing/pilot/schedules",
+        headers={"X-BitAgent-Role": "admin"}, json=payload,
+    )
+    assert first_response.status_code == 200
+    first = first_response.json()["schedule"]
+    replay = client.post(
+        "/api/v0/marketing/pilot/schedules",
+        headers={"X-BitAgent-Role": "admin"}, json=payload,
+    ).json()["schedule"]
+    monitoring = client.get(
+        "/api/v0/marketing/pilot/monitoring",
+        headers={"X-BitAgent-Role": "admin"},
+    ).json()
+    cancelled = client.post(
+        f"/api/v0/marketing/pilot/schedules/{first['schedule_id']}/cancel",
+        headers={"X-BitAgent-Role": "admin"},
+    ).json()["schedule"]
+
+    assert approval["scope"] == "controlled_pilot"
+    assert first["status"] == "scheduled"
+    assert first["provider_request_sent"] is False
+    assert replay["schedule_id"] == first["schedule_id"]
+    assert replay["replayed"] is True
+    assert monitoring["by_status"] == {"scheduled": 1}
+    assert monitoring["totals"] == {"schedules": 1, "audience": 250, "budget": 200.0}
+    assert cancelled["status"] == "cancelled"
+
+
+def test_controlled_pilot_limits_and_exact_approval_fail_closed():
+    invalid = {
+        "campaign_id": "pilot-campaign", "audience_id": "pilot-alpha",
+        "audience_size": 501, "content_id": "approved-content", "channel": "paid",
+        "scheduled_for": "2099-08-10T12:00:00Z", "budget": 501,
+        "consent_confirmed": False, "suppression_checked": False,
+        "messages_last_7_days": 4,
+    }
+    denied = client.post(
+        "/api/v0/marketing/pilot/approvals",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "parameters": {**invalid, "audience_size": 100, "budget": 100,
+                           "channel": "email", "consent_confirmed": True,
+                           "suppression_checked": True, "messages_last_7_days": 1},
+            "maker": "maker", "checker": "checker",
+            "expires_at": "2099-08-09T12:00:00Z",
+        },
+    )
+    validation = client.post(
+        "/api/v0/marketing/pilot/approvals",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "parameters": invalid, "maker": "same", "checker": "same",
+            "expires_at": "2099-08-11T12:00:00Z",
+        },
+    )
+
+    assert denied.status_code == 403
+    assert validation.status_code == 422

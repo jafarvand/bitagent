@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [1.10.0] - 2026-08-01
+
+- Added exact-parameter maker-checker approvals for tightly bounded pilot campaigns.
+- Added idempotent local scheduling with consent, suppression, frequency, audience, and budget limits.
+- Added pilot cancellation, global-pause enforcement, aggregate monitoring, and append-only audit events.
+
 ## [1.9.5] - 2026-08-01
 
 - Added exact-parameter maker-checker approval receipts for test audiences.

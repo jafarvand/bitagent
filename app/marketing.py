@@ -169,6 +169,50 @@ class SandboxExecutionRequest(BaseModel):
     parameters: AutomationParameters
 
 
+class PilotParameters(BaseModel):
+    campaign_id: str = Field(min_length=3, max_length=100)
+    audience_id: str = Field(pattern=r"^pilot-[A-Za-z0-9_-]+$")
+    audience_size: int = Field(gt=0, le=500)
+    content_id: str = Field(min_length=3, max_length=100)
+    channel: Literal["email", "social", "content", "partner", "referral"]
+    scheduled_for: datetime
+    budget: float = Field(ge=0, le=500)
+    consent_confirmed: bool
+    suppression_checked: bool
+    messages_last_7_days: int = Field(ge=0, le=3)
+
+    @model_validator(mode="after")
+    def require_eligible_audience(self):
+        if not self.consent_confirmed or not self.suppression_checked:
+            raise ValueError("consent and suppression checks must be confirmed")
+        if self.scheduled_for <= datetime.now(UTC):
+            raise ValueError("pilot schedule must be in the future")
+        return self
+
+
+class PilotApprovalRequest(BaseModel):
+    parameters: PilotParameters
+    maker: str = Field(min_length=2, max_length=100)
+    checker: str = Field(min_length=2, max_length=100)
+    expires_at: datetime
+
+    @model_validator(mode="after")
+    def require_separation_and_validity(self):
+        if self.maker == self.checker:
+            raise ValueError("maker and checker must be different")
+        if self.expires_at <= datetime.now(UTC):
+            raise ValueError("approval must expire in the future")
+        if self.expires_at > self.parameters.scheduled_for:
+            raise ValueError("approval must expire no later than the scheduled time")
+        return self
+
+
+class PilotScheduleRequest(BaseModel):
+    approval_id: str = Field(min_length=3, max_length=100)
+    idempotency_key: str = Field(min_length=8, max_length=100)
+    parameters: PilotParameters
+
+
 def build_measurement(path: str, request: MeasurementRequest) -> dict:
     report_id = str(uuid4())
     def rate(numerator: int, denominator: int) -> float | None:
@@ -411,6 +455,26 @@ def _connect(path: str) -> sqlite3.Connection:
     connection.execute(
         "INSERT OR IGNORE INTO marketing_control(singleton,paused) VALUES(1,0)"
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS marketing_pilot_approvals (
+            approval_id TEXT PRIMARY KEY, created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL, maker TEXT NOT NULL, checker TEXT NOT NULL,
+            parameters_hash TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS marketing_pilot_schedules (
+            schedule_id TEXT PRIMARY KEY, approval_id TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
+            scheduled_for TEXT NOT NULL, status TEXT NOT NULL,
+            audience_size INTEGER NOT NULL, budget REAL NOT NULL,
+            parameters_hash TEXT NOT NULL
+        )
+        """
+    )
     return connection
 
 
@@ -525,3 +589,110 @@ def rollback_sandbox(path: str, execution_id: str) -> tuple[int, dict]:
     result = {"execution_id": execution_id, "status": "rolled_back", "downstream_request_sent": False}
     result["audit"] = record_event(path, "sandbox_rolled_back", execution_id, result)
     return 200, result
+
+
+def create_pilot_approval(path: str, request: PilotApprovalRequest) -> dict:
+    approval_id = str(uuid4())
+    created_at = datetime.now(UTC).isoformat()
+    parameters_hash = hashlib.sha256(
+        _canonical(request.parameters.model_dump(mode="json")).encode()
+    ).hexdigest()
+    with _connect(path) as connection:
+        connection.execute(
+            "INSERT INTO marketing_pilot_approvals VALUES(?,?,?,?,?,?)",
+            (approval_id, created_at, request.expires_at.isoformat(), request.maker,
+             request.checker, parameters_hash),
+        )
+    receipt = {
+        "approval_id": approval_id, "created_at": created_at,
+        "expires_at": request.expires_at.isoformat(), "maker": request.maker,
+        "checker": request.checker, "parameters_hash": parameters_hash,
+        "scope": "controlled_pilot", "audience_limit": 500, "budget_limit": 500,
+    }
+    receipt["audit"] = record_event(path, "pilot_approved", approval_id, receipt)
+    return receipt
+
+
+def schedule_pilot(path: str, request: PilotScheduleRequest) -> tuple[int, dict]:
+    supplied_hash = hashlib.sha256(
+        _canonical(request.parameters.model_dump(mode="json")).encode()
+    ).hexdigest()
+    with _connect(path) as connection:
+        existing = connection.execute(
+            "SELECT * FROM marketing_pilot_schedules WHERE idempotency_key=?",
+            (request.idempotency_key,),
+        ).fetchone()
+        if existing:
+            return 200, {
+                "schedule_id": existing["schedule_id"], "status": existing["status"],
+                "replayed": True,
+            }
+        paused = bool(connection.execute(
+            "SELECT paused FROM marketing_control WHERE singleton=1"
+        ).fetchone()["paused"])
+        if paused:
+            return 409, {"code": "automation_paused"}
+        approval = connection.execute(
+            "SELECT * FROM marketing_pilot_approvals WHERE approval_id=?",
+            (request.approval_id,),
+        ).fetchone()
+        if not approval:
+            return 404, {"code": "approval_not_found"}
+        if datetime.fromisoformat(approval["expires_at"]) <= datetime.now(UTC):
+            return 409, {"code": "approval_expired"}
+        if approval["parameters_hash"] != supplied_hash:
+            return 409, {"code": "approval_parameters_mismatch"}
+        schedule_id = str(uuid4())
+        connection.execute(
+            "INSERT INTO marketing_pilot_schedules VALUES(?,?,?,?,?,?,?,?,?)",
+            (schedule_id, request.approval_id, request.idempotency_key,
+             datetime.now(UTC).isoformat(), request.parameters.scheduled_for.isoformat(),
+             "scheduled", request.parameters.audience_size, request.parameters.budget,
+             supplied_hash),
+        )
+    result = {
+        "schedule_id": schedule_id, "status": "scheduled", "replayed": False,
+        "connector": "local_controlled_pilot_queue", "provider_request_sent": False,
+        "monitoring_enabled": True, "cancel_available": True,
+    }
+    result["audit"] = record_event(path, "pilot_scheduled", schedule_id, result)
+    return 201, result
+
+
+def cancel_pilot(path: str, schedule_id: str) -> tuple[int, dict]:
+    with _connect(path) as connection:
+        row = connection.execute(
+            "SELECT status FROM marketing_pilot_schedules WHERE schedule_id=?",
+            (schedule_id,),
+        ).fetchone()
+        if not row:
+            return 404, {"code": "schedule_not_found"}
+        if row["status"] == "cancelled":
+            return 200, {"schedule_id": schedule_id, "status": "cancelled", "replayed": True}
+        connection.execute(
+            "UPDATE marketing_pilot_schedules SET status='cancelled' WHERE schedule_id=?",
+            (schedule_id,),
+        )
+    result = {"schedule_id": schedule_id, "status": "cancelled", "provider_request_sent": False}
+    result["audit"] = record_event(path, "pilot_cancelled", schedule_id, result)
+    return 200, result
+
+
+def pilot_monitoring(path: str) -> dict:
+    with _connect(path) as connection:
+        paused = bool(connection.execute(
+            "SELECT paused FROM marketing_control WHERE singleton=1"
+        ).fetchone()["paused"])
+        rows = connection.execute(
+            "SELECT status, COUNT(*) AS count, COALESCE(SUM(audience_size),0) AS audience, "
+            "COALESCE(SUM(budget),0) AS budget FROM marketing_pilot_schedules GROUP BY status"
+        ).fetchall()
+    totals = {"schedules": 0, "audience": 0, "budget": 0.0}
+    by_status = {}
+    for row in rows:
+        by_status[row["status"]] = row["count"]
+        totals["schedules"] += row["count"]
+        totals["audience"] += row["audience"]
+        totals["budget"] += row["budget"]
+    return {"paused": paused, "by_status": by_status, "totals": totals,
+            "limits": {"audience_per_schedule": 500, "budget_per_schedule": 500}}
