@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.6.0] - 2026-08-01
+
+- Added tenant-scoped versioned knowledge with owner, approval, role, effective-date, expiry, source, and content-hash controls.
+- Added governed retrieval that excludes draft, expired, unauthorized, superseded, and cross-tenant documents.
+- Added ticket intent, urgency, dissatisfaction and escalation classification with PII redaction, cited account-safe drafts, and mandatory human review.
+
 ## [2.5.0] - 2026-08-01
 
 - Added correlation across authentication, admin, IAM, WAF, host, and application events.

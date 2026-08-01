@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.5.0"
+    assert response.json()["version"] == "2.6.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.5.0"
+    assert body["version"] == "2.6.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.5.0",
+        "version": "2.6.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.5.0"
+    assert report["version"] == "2.6.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.5.0"
+    assert manifest["current_version"] == "2.6.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1805,3 +1805,80 @@ def test_xima_security_agent_blocks_conflicting_evidence():
     assert result["status"] == "blocked"
     assert result["incidents"] == []
     assert result["confidence"] == "none"
+
+
+def test_xima_governed_knowledge_filters_drafts_expiry_roles_and_tenants():
+    approved = {
+        "tenant_id": "exchange-a", "document_id": "withdrawal-guide",
+        "title": "Withdrawal review guide", "document_type": "product", "version": "1.0.0",
+        "owner": "support", "approval_status": "approved", "approved_by_role": "compliance",
+        "effective_at": "2025-01-01T00:00:00Z", "expires_at": "2099-01-01T00:00:00Z",
+        "data_class": "internal", "allowed_roles": ["operator", "admin"],
+        "keywords": ["withdrawal", "pending", "review"],
+        "content": "Pending withdrawals require status review using the approved support workflow.",
+        "source_ref": "support-policy:withdrawals",
+    }
+    created = client.post(
+        "/api/v0/xima/knowledge/documents",
+        headers={"X-BitAgent-Role": "admin"}, json=approved,
+    )
+    draft = client.post(
+        "/api/v0/xima/knowledge/documents",
+        headers={"X-BitAgent-Role": "admin"},
+        json={**approved, "document_id": "draft-guide", "approval_status": "draft",
+              "approved_by_role": None},
+    )
+    search = client.get(
+        "/api/v0/xima/knowledge/search?tenant_id=exchange-a&query=pending%20withdrawal",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()["items"]
+    cross_tenant = client.get(
+        "/api/v0/xima/knowledge/search?tenant_id=exchange-b&query=pending%20withdrawal",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()["items"]
+
+    assert created.status_code == 201
+    assert draft.status_code == 201
+    assert [item["document_id"] for item in search] == ["withdrawal-guide"]
+    assert search[0]["content_hash"] == created.json()["document"]["content_hash"]
+    assert cross_tenant == []
+
+
+def test_xima_support_agent_redacts_classifies_escalates_and_cites_safe_draft():
+    client.post(
+        "/api/v0/xima/knowledge/documents",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "tenant_id": "exchange-a", "document_id": "security-guide",
+            "title": "Account security guide", "document_type": "policy", "version": "1.0.0",
+            "owner": "security", "approval_status": "approved", "approved_by_role": "security",
+            "effective_at": "2025-01-01T00:00:00Z", "expires_at": "2099-01-01T00:00:00Z",
+            "data_class": "internal", "allowed_roles": ["operator", "admin"],
+            "keywords": ["hacked", "account", "unauthorized", "security"],
+            "content": "Escalate unauthorized account activity and follow the account security runbook.",
+            "source_ref": "policy:account-security",
+        },
+    )
+    result = client.post(
+        "/api/v0/xima/agents/support/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "ticket_id": "TICKET-1",
+            "observed_at": datetime.now(UTC).isoformat(), "evidence_refs": ["ticket-1"],
+            "owner": "support", "evidence_fresh": True, "conflicting_fields": [],
+            "language": "en", "subject": "Urgent hacked account",
+            "message": "Contact me at user@example.com. Unauthorized access to 123456789012.",
+            "account_state": "under_review",
+        },
+    ).json()["analysis"]
+
+    assert result["classification"]["intent"] == "account_security"
+    assert result["classification"]["escalate"] is True
+    assert result["redacted_ticket"]["message"] == (
+        "Contact me at [REDACTED_EMAIL]. Unauthorized access to [REDACTED_NUMBER]."
+    )
+    assert result["citations"][0]["document_id"] == "security-guide"
+    assert "Never share a password" in result["draft"]
+    assert result["human_review_required"] is True
+    assert result["send_enabled"] is False
+    assert result["action_executed"] is False

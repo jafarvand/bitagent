@@ -88,8 +88,12 @@ from app.xima_market import MarketRiskRequest as XimaMarketRiskRequest, analyze_
 from app.xima_treasury import TreasuryAnalysisRequest, analyze_treasury
 from app.xima_aml import AMLAnalysisRequest, AMLFeedbackRequest, analyze_aml, record_aml_feedback
 from app.xima_security import SecurityAnalysisRequest, analyze_security
+from app.xima_support import (
+    KnowledgeDocumentRequest, SupportTicketRequest, analyze_support,
+    ingest_knowledge, retrieve_knowledge,
+)
 
-VERSION = "2.5.0"
+VERSION = "2.6.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -139,7 +143,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA Security Intelligence",
+        "release": "XIMA Support and Governed Knowledge",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -462,6 +466,42 @@ async def xima_security_analyze(
 ):
     authorize("view_xima", role)
     return {"version": VERSION, "analysis": analyze_security(request)}
+
+
+@app.post("/api/v0/xima/knowledge/documents", status_code=201)
+async def xima_knowledge_ingest(
+    request: KnowledgeDocumentRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_xima_knowledge", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "knowledge_role_denied"})
+    status_code, result = ingest_knowledge(settings.evidence_db_path, request)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "document": result}
+
+
+@app.get("/api/v0/xima/knowledge/search")
+async def xima_knowledge_search(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    query: str = Query(min_length=2, max_length=1000),
+    limit: int = Query(default=5, ge=1, le=20),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("view_xima", role)
+    return {"version": VERSION, "tenant_id": tenant_id,
+            "items": retrieve_knowledge(settings.evidence_db_path, tenant_id, decision["role"], query, limit)}
+
+
+@app.post("/api/v0/xima/agents/support/analyze")
+async def xima_support_analyze(
+    request: SupportTicketRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("view_xima", role)
+    return {"version": VERSION,
+            "analysis": analyze_support(settings.evidence_db_path, request, decision["role"])}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:
