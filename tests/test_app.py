@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.7.0"
+    assert response.json()["version"] == "2.8.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.7.0"
+    assert body["version"] == "2.8.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.7.0",
+        "version": "2.8.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.7.0"
+    assert report["version"] == "2.8.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.7.0"
+    assert manifest["current_version"] == "2.8.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1984,3 +1984,80 @@ def test_xima_evaluation_gates_quality_safety_latency_cost_drift_and_fallback():
     assert failed["gates"]["adversarial"] is False
     assert failed["fallback_required"] is True
     assert failed["human_escalation_required"] is True
+
+
+def test_xima_shadow_pilot_calculates_outcomes_and_all_readiness_gates():
+    result = client.post(
+        "/api/v0/xima/pilot/shadow/evaluate",
+        headers={"X-BitAgent-Role": "auditor"},
+        json={
+            "tenant_id": "exchange-a", "window_start": "2026-07-01T00:00:00Z",
+            "window_end": "2026-08-01T00:00:00Z", "evidence_refs": ["shadow-run-1"],
+            "owner": "pilot-owner",
+            "outcomes": [
+                {"outcome_id": "o1", "alert_key": "alert-1", "predicted_material": True,
+                 "actual_material": True, "workflow_latency_ms": 100},
+                {"outcome_id": "o2", "alert_key": "alert-2", "predicted_material": False,
+                 "actual_material": False, "workflow_latency_ms": 150},
+            ],
+            "scheduled_reports": [{"report_id": "r1", "generated_within_sla": True}],
+            "reliability": {
+                "load_test_passed": True, "soak_test_passed": True,
+                "failover_test_passed": True, "backup_restore_passed": True,
+                "monitoring_verified": True, "on_call_runbook_ref": "runbook:on-call",
+                "escalation_runbook_ref": "runbook:escalation",
+                "training_record_refs": ["training:pilot-1"],
+                "acceptance_roles": [
+                    "operations", "risk", "treasury", "aml", "security", "support",
+                    "privacy", "compliance",
+                ],
+            },
+        },
+    ).json()["evaluation"]
+
+    assert result["status"] == "ready"
+    assert result["decision"] == "eligible_for_production_limited_review"
+    assert result["metrics"]["precision_percent"] == 100
+    assert result["metrics"]["recall_percent"] == 100
+    assert result["metrics"]["duplicate_percent"] == 0
+    assert all(result["gates"].values())
+    assert result["missing_acceptance_roles"] == []
+    assert result["external_approval_still_required"] is True
+    assert result["action_executed"] is False
+
+
+def test_xima_shadow_pilot_remains_not_ready_for_noise_failures_and_missing_evidence():
+    result = client.post(
+        "/api/v0/xima/pilot/shadow/evaluate",
+        headers={"X-BitAgent-Role": "auditor"},
+        json={
+            "tenant_id": "exchange-a", "window_start": "2026-07-01T00:00:00Z",
+            "window_end": "2026-08-01T00:00:00Z", "evidence_refs": ["shadow-run-bad"],
+            "owner": "pilot-owner",
+            "outcomes": [
+                {"outcome_id": "o1", "alert_key": "duplicate", "predicted_material": True,
+                 "actual_material": False, "workflow_latency_ms": 9000},
+                {"outcome_id": "o2", "alert_key": "duplicate", "predicted_material": True,
+                 "actual_material": False, "workflow_latency_ms": 9000},
+                {"outcome_id": "o3", "alert_key": "missed", "predicted_material": False,
+                 "actual_material": True, "workflow_latency_ms": 9000},
+            ],
+            "scheduled_reports": [{"report_id": "r1", "generated_within_sla": False}],
+            "reliability": {
+                "load_test_passed": False, "soak_test_passed": False,
+                "failover_test_passed": False, "backup_restore_passed": False,
+                "monitoring_verified": False, "training_record_refs": [],
+                "acceptance_roles": [],
+            },
+        },
+    ).json()["evaluation"]
+
+    assert result["status"] == "not_ready"
+    assert result["decision"] == "remain_in_shadow_mode"
+    assert result["metrics"]["false_positive"] == 2
+    assert result["metrics"]["false_negative"] == 1
+    assert result["metrics"]["duplicate_percent"] == 50
+    assert result["noise"]["duplicate_alert_keys"] == ["duplicate"]
+    assert result["gates"]["failover"] is False
+    assert result["gates"]["domain_acceptance"] is False
+    assert result["missing_acceptance_roles"]

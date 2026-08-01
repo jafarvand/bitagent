@@ -96,8 +96,9 @@ from app.xima_governance import (
     EvaluationRequest as XimaEvaluationRequest, RegistryEntryRequest,
     XimaPolicyRequest, evaluate_quality, evaluate_xima_policy, register_component,
 )
+from app.xima_shadow import ShadowPilotRequest, evaluate_shadow_pilot
 
-VERSION = "2.7.0"
+VERSION = "2.8.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -147,7 +148,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA Governance and Evaluation",
+        "release": "XIMA Shadow Pilot and Reliability",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -538,6 +539,15 @@ async def xima_evaluation(
 ):
     authorize("view_xima", role)
     return {"version": VERSION, "evaluation": evaluate_quality(request)}
+
+
+@app.post("/api/v0/xima/pilot/shadow/evaluate")
+async def xima_shadow_evaluate(
+    request: ShadowPilotRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "evaluation": evaluate_shadow_pilot(request)}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:

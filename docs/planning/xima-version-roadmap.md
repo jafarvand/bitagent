@@ -20,7 +20,7 @@ training, or steering approval as software features.
 | `2.5.0` | Security intelligence | Authentication, privileged activity, WAF, host, application, and IAM correlation with escalation and daily brief | Complete |
 | `2.6.0` | Support and governed knowledge | Ticket classification, safe drafts, escalation, cited retrieval, ownership, approval, version, and expiry workflow | Complete |
 | `2.7.0` | Governance and evaluation | Domain/data/environment/risk policy, registry, adversarial checks, quality/latency/cost evaluation, fallback, and escalation | Complete |
-| `2.8.0` | Shadow pilot and reliability | Outcome comparison, alert precision/recall, duplicate/noise reporting, load/soak/failover/restore evidence, and readiness gates | Planned |
+| `2.8.0` | Shadow pilot and reliability | Outcome comparison, alert precision/recall, duplicate/noise reporting, load/soak/failover/restore evidence, and readiness gates | Complete |
 | `2.9.0` | General action sandbox | Risk-classified previews, maker-checker separation, exact signed authorization, expiry, idempotency, timeout, result verification, rollback, and kill switch | Planned |
 
 ## Definition of software completion

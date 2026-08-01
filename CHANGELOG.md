@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.8.0] - 2026-08-01
+
+- Added shadow outcome precision, recall, false-positive, false-negative, duplicate/noise, report-success, and latency metrics.
+- Added load, soak, failover, backup/restore, monitoring, runbook, training, and cross-domain acceptance evidence gates.
+- Added fail-closed shadow readiness decisions that preserve mandatory external production approval.
+
 ## [2.7.0] - 2026-08-01
 
 - Added fail-closed cross-domain policy decisions by role, tenant, data class, environment, risk, action, freshness, MFA, and approvals.
