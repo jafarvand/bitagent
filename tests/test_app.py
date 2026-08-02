@@ -84,13 +84,14 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.12.0-api-tests' in page.text
-    assert len(catalog["tests"]) == 32
+    assert 'exchange-api-test.js?v=2.12.0-exchange-0.8' in page.text
+    assert catalog["exchange_api_version"] == "0.8.0-pilot"
+    assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
     assert all(item["method"] == "GET" for item in catalog["tests"])
     assert {item["id"] for item in catalog["tests"]} >= {
-        "health", "operations", "ticker", "liabilities", "aml-cases",
-        "security-events", "support-tickets", "knowledge",
+        "health", "operations", "market-summary", "liabilities",
+        "treasury-assets", "user-summary", "user-balances", "user-pnl",
     }
 
 
@@ -99,19 +100,26 @@ def test_exchange_api_test_runs_only_allowlisted_signed_get(monkeypatch):
 
     async def fake_get(path, params=None):
         observed["path"] = path
+        observed["params"] = params
         return {"data": {"market": "USDT_IRT"}}
 
     monkeypatch.setattr(exchange_client, "get", fake_get)
     response = client.post(
         "/api/v0/exchange-tests/run",
         headers={"X-BitAgent-Role": "operator"},
-        json={"test_id": "ticker", "market": "USDT_IRT", "case_id": "case-1"},
+        json={"test_id": "user-trades", "market": "USDT_IRT", "user_id": 42, "limit": 5},
     )
 
     assert response.status_code == 200
     assert response.json()["ok"] is True
-    assert observed["path"] == "/api/bot/market/USDT_IRT/ticker"
+    assert observed["path"] == "/api/bot/user/42/trades"
+    assert observed["params"]["limit"] == 5
+    assert {"date_from", "date_to"} <= observed["params"].keys()
+    assert response.json()["exchange_api_version"] == "0.8.0-pilot"
     assert "credentials" not in str(response.json()).lower()
+    assert response.json()["sensitive_exchange_data_exposed"] is False
+    assert "response" not in response.json()
+    assert response.json()["response_summary"]["data_keys"] == ["market"]
 
     unknown = client.post(
         "/api/v0/exchange-tests/run",
@@ -1011,6 +1019,18 @@ def test_combined_service_keys_are_supported(monkeypatch):
     assert body["key_id_configured"] is True
     assert body["secret_configured"] is True
     assert "test-secret" not in str(body)
+
+
+def test_scoped_service_key_format_does_not_append_scopes_to_secret(monkeypatch):
+    monkeypatch.setattr(settings, "exchange_bot_key_id", "")
+    monkeypatch.setattr(settings, "exchange_bot_secret", "")
+    monkeypatch.setattr(
+        settings,
+        "exchange_bot_service_keys",
+        "pilot-key:test-secret:health:read|operations:read",
+    )
+
+    assert settings.exchange_credentials() == ("pilot-key", "test-secret")
 
 
 def test_marketing_foundation_is_governed_and_non_executing():

@@ -107,6 +107,7 @@ from app.xima_actions import (
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
 VERSION = "2.12.0"
+EXCHANGE_API_VERSION = "0.8.0-pilot"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -151,44 +152,49 @@ async def exchange_api_test_page():
 
 EXCHANGE_API_TESTS = [
     ("health", "Platform", "/api/bot/health"),
-    ("dependencies", "Operations", "/api/bot/services/dependencies"),
-    ("operations", "Operations", "/api/bot/operations"),
     ("transactions", "Operations", "/api/bot/transactions/summary"),
     ("withdrawals", "Operations", "/api/bot/withdrawals/pending"),
     ("deposits", "Operations", "/api/bot/deposits/pending"),
-    ("queues", "Operations", "/api/bot/queues/status"),
-    ("workers", "Operations", "/api/bot/workers/status"),
-    ("networks", "Operations", "/api/bot/networks/status"),
-    ("markets", "Market", "/api/bot/markets"),
+    ("operations", "Operations", "/api/bot/operations"),
     ("market-summary", "Market", "/api/bot/market/{market}/summary"),
-    ("ticker", "Market", "/api/bot/market/{market}/ticker"),
-    ("order-book", "Market", "/api/bot/market/{market}/order-book"),
-    ("trades", "Market", "/api/bot/market/{market}/trades"),
-    ("candles", "Market", "/api/bot/market/{market}/candles"),
-    ("exposure", "Risk", "/api/bot/risk/exposure"),
-    ("market-limits", "Risk", "/api/bot/risk/market-limits"),
     ("liabilities", "Treasury", "/api/bot/ledger/liabilities"),
     ("treasury-assets", "Treasury", "/api/bot/treasury/assets"),
-    ("wallets", "Treasury", "/api/bot/wallets/summary"),
-    ("obligations", "Treasury", "/api/bot/treasury/obligations"),
-    ("reconciliation-runs", "Treasury", "/api/bot/reconciliation/runs"),
-    ("reconciliation-exceptions", "Treasury", "/api/bot/reconciliation/exceptions"),
-    ("aml-cases", "AML", "/api/bot/aml/cases"),
-    ("aml-evidence", "AML", "/api/bot/aml/cases/{case_id}/evidence"),
-    ("aml-queue", "AML", "/api/bot/aml/queue/summary"),
-    ("security-events", "Security", "/api/bot/security/events"),
-    ("security-incidents", "Security", "/api/bot/security/incidents"),
-    ("privileged-activity", "Security", "/api/bot/security/privileged-activity"),
-    ("support-tickets", "Support", "/api/bot/support/tickets"),
-    ("support-outcomes", "Support", "/api/bot/support/outcomes"),
-    ("knowledge", "Support", "/api/bot/knowledge/documents"),
+    ("user-summary", "User", "/api/bot/user/{user_id}/summary"),
+    ("user-balances", "User", "/api/bot/user/{user_id}/balances"),
+    ("user-trades", "User", "/api/bot/user/{user_id}/trades"),
+    ("user-deposits", "User", "/api/bot/user/{user_id}/deposits"),
+    ("user-withdrawals", "User", "/api/bot/user/{user_id}/withdrawals"),
+    ("user-pnl", "User", "/api/bot/user/{user_id}/pnl"),
 ]
 
 
 class ExchangeAPITestRequest(BaseModel):
     test_id: str = Field(min_length=1, max_length=80)
     market: str = Field(default="BTC_USDT", pattern=r"^[A-Z0-9]+_[A-Z0-9]+$")
-    case_id: str = Field(default="test-case", pattern=r"^[A-Za-z0-9_-]+$")
+    user_id: int = Field(default=1, ge=1)
+    limit: int = Field(default=10, ge=1, le=100)
+
+
+def summarize_exchange_test_response(payload: dict) -> dict:
+    data = payload.get("data")
+    summary = {
+        "schema": payload.get("schema"),
+        "source_id": payload.get("source_id"),
+        "observed_at": payload.get("observed_at"),
+        "generated_at": payload.get("generated_at"),
+        "freshness_sla_seconds": payload.get("freshness_sla_seconds"),
+        "quality": payload.get("quality"),
+        "request_id": payload.get("request_id"),
+        "data_type": type(data).__name__,
+    }
+    if isinstance(data, dict):
+        summary["data_keys"] = sorted(data.keys())
+        summary["collection_counts"] = {
+            key: len(value) for key, value in data.items() if isinstance(value, list)
+        }
+    elif isinstance(data, list):
+        summary["item_count"] = len(data)
+    return summary
 
 
 @app.get("/api/v0/exchange-tests")
@@ -198,6 +204,7 @@ async def exchange_tests(
     authorize("view_xima", role)
     return {
         "version": VERSION,
+        "exchange_api_version": EXCHANGE_API_VERSION,
         "mode": settings.bitagent_mode,
         "exchange_base_url": settings.exchange_api_base_url,
         "credentials_exposed": False,
@@ -218,18 +225,35 @@ async def run_exchange_test(
     if selected is None:
         raise HTTPException(status_code=404, detail="Unknown exchange API test")
     _, group, template = selected
-    path = template.format(market=request.market, case_id=request.case_id)
+    path = template.format(market=request.market, user_id=request.user_id)
+    now = datetime.now(UTC)
+    date_params = {
+        "date_from": (now - timedelta(days=7)).date().isoformat(),
+        "date_to": now.date().isoformat(),
+    }
+    params = None
+    if request.test_id == "operations":
+        params = date_params
+    elif request.test_id in {"withdrawals", "deposits"}:
+        params = {"limit": request.limit}
+    elif request.test_id in {"user-trades", "user-deposits", "user-withdrawals"}:
+        params = {**date_params, "limit": request.limit}
+    elif request.test_id == "user-pnl":
+        params = date_params
     started = datetime.now(UTC)
     try:
-        payload = await exchange_client.get(path)
+        payload = await exchange_client.get(path, params)
         return {
             "ok": True, "group": group, "method": "GET", "path": path,
+            "query": params or {}, "exchange_api_version": EXCHANGE_API_VERSION,
             "duration_ms": round((datetime.now(UTC) - started).total_seconds() * 1000, 2),
-            "response": payload,
+            "response_summary": summarize_exchange_test_response(payload),
+            "sensitive_exchange_data_exposed": False,
         }
     except ExchangeAPIError as exc:
         return {
             "ok": False, "group": group, "method": "GET", "path": path,
+            "query": params or {}, "exchange_api_version": EXCHANGE_API_VERSION,
             "duration_ms": round((datetime.now(UTC) - started).total_seconds() * 1000, 2),
             "error": str(exc),
         }

@@ -6,10 +6,18 @@ info:
     pilot (withdrawal/deposit slowdown investigation). All routes are GET-only
     and live in Rest\Controller\BotController on exchange-backend. No write,
     trade, transfer, or withdrawal endpoints are exposed here by design.
-  version: "0.3.0-pilot"
+  version: "0.8.0-pilot"
 servers:
   - url: https://devapi.zekabot.com
     description: exchange-backend (VIRTUAL_HOST devapi.zekabot.com / apistage2.zekabot.com)
+  - url: https://staging-devapi.zekabot.com
+    description: >
+      Isolated sandbox — separate MySQL with 100% synthetic fixture data
+      (no production data of any kind), separate bot-auth keys, deliberately
+      no matching-engine replica (so endpoints that call it correctly return
+      500/502 rather than working — that's intentional, not a bug). See
+      README "Staging environment" for the scenario matrix the fixtures
+      cover and how to get a key.
 security:
   - botServiceAuth: []
 paths:
@@ -97,6 +105,123 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/ServerError' }
         '503': { $ref: '#/components/responses/Unavailable' }
+
+  /api/bot/deposits/pending:
+    get:
+      summary: All currently in-flight deposits, exchange-wide, oldest first
+      description: >
+        Same shape and rationale as /withdrawals/pending — cross-user,
+        keyset/cursor-paginated by id, oldest first. Open here means
+        is_success IN (0, 99), i.e. pending or processing.
+        One real difference: `network` on this endpoint is a human-readable
+        name from asset_deposit_networks.name (observed live in Persian for
+        IRT/fiat rows, e.g. "کارتهای شتاب" — Iran's Shetab bank-card network),
+        not a short ASCII ticker like withdrawals' network_ticker — the two
+        underlying tables simply don't have matching columns. Same
+        4-year-old-row caveat as /transactions/summary applies here too.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - name: cursor
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: Last deposit_id seen (from the previous page's next_cursor). Omit for the first page.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingDepositsResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /api/bot/ledger/liabilities:
+    get:
+      summary: Aggregate customer liability per asset, from the matching engine's own balance snapshots
+      description: >
+        Reads exchange-core's periodic slice_balance_<unix_ts> snapshot
+        tables (trade_log DB) — the same source market-monitor's own
+        internal totals script already reads. No fixed table name: the
+        latest one is resolved dynamically every request, since a new
+        snapshot appears periodically and old ones aren't guaranteed to
+        stick around. `ledger_snapshot_at` is the actual snapshot time, not
+        "now" — treat data as being up to one snapshot interval stale
+        (observed live: ~15 minutes apart, but not a documented SLA).
+        **Does not include IRT valuation per asset** — with 130+ distinct
+        assets observed live, computing that would mean hundreds of
+        matching-engine RPC round-trips per request; returning raw per-asset
+        totals only rather than building something that risks timing out.
+        Scoped to `ledger-summary:read`.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiabilitiesResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '502':
+          description: The snapshot table exists but the aggregate query itself failed (ledger_query_failed)
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } }
+        '503':
+          description: Either the trade_log database is unreachable (ledger_database_unreachable) or no snapshot table exists yet (ledger_snapshot_unavailable) — check error.code
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } }
+
+  /api/bot/treasury/assets:
+    get:
+      summary: Exchange-controlled crypto wallet totals plus company IRT bank balance
+      description: >
+        Combines two sources into one response: (1) `treasury_wallets` /
+        `treasury_wallet_tokens` (exchange-backend-mysql) — the same tables
+        exchange-admin's Treasury page manages — aggregated by asset and
+        custody class; and (2) a live company-wide IRT total from the Jibit
+        Co-Bank API, the same integration exchange-admin's Accounting page
+        uses, across all active `company_bank_accounts` (deduplicated by
+        IBAN — production has duplicate active rows sharing one IBAN, which
+        would otherwise double-count). **Only `hot`/`cold` custody classes
+        exist** — the contract's fuller warm/custodian/pending/restricted
+        taxonomy has no equivalent in the underlying schema
+        (`treasury_wallets.wallet_type` only ever holds `hot` or `cold`).
+        Crypto balances are **manual-refresh-only**: exchange-admin's
+        Treasury page has no cron auto-refresh, an admin must click
+        "Refresh" per wallet, so `last_refreshed_at` can be arbitrarily
+        stale — check it per wallet rather than assuming freshness from
+        `freshness_sla_seconds` alone. A wallet or token with a
+        `last_refresh_error`, or a bank account whose Jibit balance fetch
+        fails, does **not** fail the whole request — it's surfaced as a row
+        with `error`/`last_refresh_error` set and a matching entry in the
+        top-level `quality.warnings` array (`quality.complete: false`),
+        while every other row still returns normally. The IRT balance
+        itself is cached 60s per IBAN; the Jibit access token is cached
+        ~9h (30s on auth failure) — both cache entries live in the shared
+        `temp_data` table, the same cache exchange-admin's Accounting page
+        reads and writes. Addresses and IBANs are masked. Scoped to
+        `wallet-summary:read`.
+      responses:
+        '200':
+          description: >
+            OK. Always 200 once authenticated and past validation — source
+            failures (unreachable Jibit, a wallet's failed on-chain refresh)
+            degrade individual fields/rows rather than the whole request;
+            see `quality.warnings`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuryAssetsResponse'
+        '401': { $ref: '#/components/responses/AuthError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /api/bot/operations:
     get:
@@ -311,6 +436,20 @@ components:
         - `X-Request-ID`: a v1-5 UUID, single-use (replayed IDs are rejected with 409).
         - `X-Request-Signature`: hex HMAC-SHA256, computed as below.
 
+        v0.4 adds per-key scopes, matching exchange-side-requirements.md's
+        authorization table. Only these eight endpoints are scope-checked
+        today — the rest predate that contract and stay open to any
+        authenticated key: `health` → `health:read`, `operations` →
+        `operations:read`, `transactions/summary` → `transactions:read`,
+        `withdrawals/pending` → `transactions:read`, `deposits/pending` →
+        `transactions:read`, `market/{id}/summary` → `markets:read`,
+        `ledger/liabilities` → `ledger-summary:read`, `treasury/assets` →
+        `wallet-summary:read`. A key
+        provisioned with no scope list (the pre-v0.4 `key_id:secret` format,
+        still accepted) has unrestricted access — that's a backward-compat
+        path for existing keys, not the intended shape for a new one. A
+        scope-denied call gets 403 `scope_denied`.
+
         Canonical string to sign (fields joined with `\n`):
         ```
         METHOD
@@ -371,7 +510,7 @@ components:
       content:
         application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } }
     Forbidden:
-      description: Caller IP not in the allowlist (when EXCHANGE_BOT_ALLOWED_IPS is set)
+      description: Caller IP not in the allowlist (source_ip_denied), or the key lacks the required scope for this endpoint (scope_denied) — check error.code to tell them apart.
       content:
         application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } }
     NotFound:
@@ -410,52 +549,95 @@ components:
       properties:
         error:
           type: object
-          required: [code, message, request_id]
+          required: [code, message, request_id, retryable, retry_after_seconds, details]
           properties:
             code: { type: string, example: service_auth_failed }
             message: { type: string }
             request_id: { type: string }
+            retryable: { type: boolean, description: "true for 429/500/502/503/504 — false for every other code (4xx caused by the request itself won't succeed on retry without changing something)." }
+            retry_after_seconds: { type: integer, nullable: true, description: "Only ever set (to 60, matching the rate-limit window) on a 429. Null on every other error." }
+            details: { type: object, description: "Reserved for future structured error context (e.g. which field failed validation). Always an empty object today." }
 
-    Meta:
+    SchemaRef:
       type: object
-      required: [request_id, generated_at, currency, data_freshness_seconds]
+      required: [name, version]
       properties:
-        request_id: { type: string }
-        generated_at: { type: string, format: date-time, description: "True ISO 8601 UTC, e.g. 2026-07-29T18:18:33+00:00." }
-        currency: { type: string, example: IRT }
-        data_freshness_seconds: { type: integer, minimum: 0 }
+        name: { type: string, description: "Dot-separated schema name, e.g. transactions.summary.", example: "transactions.summary" }
+        version: { type: string, example: "1.0.0" }
+
+    # Shared response wrapper per exchange-side-requirements.md §2.3. Every
+    # XResponse schema below is `allOf: [Envelope, {data: <shape>}]` rather
+    # than repeating these fields — keep it that way; don't duplicate.
+    Envelope:
+      type: object
+      required: [schema, tenant_id, source_id, owner, observed_at, generated_at, freshness_sla_seconds, data_class, lineage, quality, request_id]
+      properties:
+        schema: { $ref: '#/components/schemas/SchemaRef' }
+        tenant_id: { type: string, description: "Fixed at 'bitimen' — this is a single-tenant exchange, not a real multi-tenant lookup.", example: bitimen }
+        source_id: { type: string, description: "Which backing system the data came from, e.g. exchange-backend-mysql, exchange-core, exchange-backend.", example: exchange-backend-mysql }
+        owner: { type: string, description: "Team that owns this data source. Configurable via EXCHANGE_BOT_OWNER; not yet split per-endpoint (see README).", example: exchange-backend-team }
+        observed_at:
+          type: string
+          format: date-time
+          description: "When the underlying data was captured. Currently always identical to generated_at — every endpoint reads live at request time with no separate capture step. Will diverge once any endpoint starts serving from a cache or snapshot table."
+        generated_at: { type: string, format: date-time, description: "When this response was built. True ISO 8601 UTC." }
+        freshness_sla_seconds: { type: integer, minimum: 0, description: "Renamed from data_freshness_seconds in v0.3 — same semantics, an informal per-endpoint cache-staleness hint, not a contractually monitored SLA yet." }
+        data_class: { type: string, enum: [internal], description: "Only 'internal' is used today — no endpoint here classifies data as public/confidential/restricted yet." }
+        lineage: { type: array, items: { type: string }, description: "Single-element array naming source_id today — not a real multi-hop lineage graph yet." }
+        quality:
+          type: object
+          required: [complete, warnings]
+          properties:
+            complete: { type: boolean, description: "Always true today — no endpoint detects/flags partial results yet." }
+            warnings: { type: array, items: { type: string }, description: "Always empty today." }
+        request_id: { type: string, description: "Echoes the caller's X-Request-ID. Not part of the requirements-doc envelope spec, kept in addition to it for audit correlation with [bot-auth] log lines." }
 
     HealthResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [status, service, server_time, server_time_unix, components]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            status:
-              type: string
-              enum: [ok, degraded]
-              description: "`degraded` if any component reports fail. Always check this — the HTTP status is 200 either way."
-            service: { type: string, example: exchange-backend }
-            server_time:
-              type: string
-              format: date-time
-              description: "Server clock. Compare against your own to detect drift before it starts causing signature rejections (requests must be within 60s)."
-            server_time_unix: { type: integer }
-            components:
+            data:
               type: object
-              required: [database, matching_engine]
+              required: [status, service, environment, server_time, server_time_unix, components]
               properties:
-                database: { $ref: '#/components/schemas/HealthComponent' }
-                matching_engine: { $ref: '#/components/schemas/HealthComponent' }
-        meta: { $ref: '#/components/schemas/Meta' }
+                status:
+                  type: string
+                  enum: [healthy, degraded, maintenance]
+                  description: >
+                    'maintenance' overrides 'degraded' if both are true — takes
+                    priority because it's the more informative signal ("expected
+                    downtime" vs "unexpected problem"). Never 'unavailable': if this
+                    endpoint is answering at all, the service can't self-report
+                    full unavailability in the sense that word implies. Always
+                    check this field — the HTTP status is 200 in every case.
+                service: { type: string, example: exchange-backend }
+                environment: { type: string, example: production, description: "From EXCHANGE_BOT_ENVIRONMENT, default 'production'." }
+                server_time:
+                  type: string
+                  format: date-time
+                  description: "Server clock. Compare against your own to detect drift before it starts causing signature rejections (requests must be within 60s)."
+                server_time_unix: { type: integer }
+                components:
+                  type: object
+                  required: [database, matching_engine]
+                  properties:
+                    database: { $ref: '#/components/schemas/HealthComponent' }
+                    matching_engine: { $ref: '#/components/schemas/HealthComponent' }
+                  description: >
+                    Not implemented (would need new instrumentation): request
+                    rate, error rate, latency percentiles, CPU/memory/disk
+                    saturation, uptime, deployed version. Omitted rather than
+                    fabricated as zeros.
 
     HealthComponent:
       type: object
-      required: [status, latency_ms]
+      required: [name, type, status, latency_ms]
       properties:
-        status: { type: string, enum: [ok, fail] }
+        name: { type: string, example: exchange-backend-mysql }
+        type: { type: string, example: mysql }
+        status: { type: string, enum: [healthy, fail] }
         latency_ms: { type: number, description: "Round-trip probe time in milliseconds." }
         error_code:
           type: string
@@ -463,294 +645,454 @@ components:
           description: "Present only when status is fail. Deliberately a coarse code — underlying exception messages are not exposed, as they can carry DSNs/credentials."
 
     TransactionsSummaryResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [as_of, deposits, withdrawals]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            as_of: { type: string, format: date-time }
-            deposits:
+            data:
               type: object
-              required: [by_status, open_count, oldest_open_created_at, oldest_open_age_seconds]
+              required: [as_of, deposits, withdrawals]
               properties:
-                by_status:
+                as_of: { type: string, format: date-time }
+                deposits:
                   type: object
-                  required: [pending, processing, confirmed, rejected, unknown]
+                  required: [by_status, open_count, oldest_open_created_at, oldest_open_age_seconds]
                   properties:
-                    pending: { type: integer }
-                    processing: { type: integer }
-                    confirmed: { type: integer }
-                    rejected: { type: integer }
-                    unknown: { type: integer }
-                open_count: { type: integer, description: "pending + processing" }
-                oldest_open_created_at: { type: string, nullable: true, description: "Null only if there are zero open deposits." }
-                oldest_open_age_seconds: { type: integer, nullable: true, description: "See endpoint description for the stale-row caveat — do not alert on this raw." }
-            withdrawals:
-              type: object
-              required: [by_status, open_count, oldest_open_created_at, oldest_open_age_seconds]
-              properties:
-                by_status:
+                    by_status:
+                      type: object
+                      required: [pending, processing, confirmed, rejected, unknown]
+                      properties:
+                        pending: { type: integer }
+                        processing: { type: integer }
+                        confirmed: { type: integer }
+                        rejected: { type: integer }
+                        unknown: { type: integer }
+                    open_count: { type: integer, description: "pending + processing" }
+                    oldest_open_created_at: { type: string, nullable: true, description: "Null only if there are zero open deposits." }
+                    oldest_open_age_seconds: { type: integer, nullable: true, description: "See endpoint description for the stale-row caveat — do not alert on this raw." }
+                withdrawals:
                   type: object
-                  required: [pending, verified, processing, completed, cancelled]
+                  required: [by_status, open_count, oldest_open_created_at, oldest_open_age_seconds]
                   properties:
-                    pending: { type: integer }
-                    verified: { type: integer }
-                    processing: { type: integer }
-                    completed: { type: integer }
-                    cancelled: { type: integer }
-                open_count: { type: integer, description: "pending + verified + processing" }
-                oldest_open_created_at: { type: string, nullable: true }
-                oldest_open_age_seconds: { type: integer, nullable: true, description: "See endpoint description for the stale-row caveat — do not alert on this raw." }
-        meta: { $ref: '#/components/schemas/Meta' }
+                    by_status:
+                      type: object
+                      required: [pending, verified, processing, completed, cancelled]
+                      properties:
+                        pending: { type: integer }
+                        verified: { type: integer }
+                        processing: { type: integer }
+                        completed: { type: integer }
+                        cancelled: { type: integer }
+                    open_count: { type: integer, description: "pending + verified + processing" }
+                    oldest_open_created_at: { type: string, nullable: true }
+                    oldest_open_age_seconds: { type: integer, nullable: true, description: "See endpoint description for the stale-row caveat — do not alert on this raw." }
 
     PendingWithdrawalsResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [as_of, count_returned, next_cursor, items]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            as_of: { type: string, format: date-time }
-            count_returned: { type: integer }
-            next_cursor: { type: string, nullable: true, description: "Pass as ?cursor= to get the next page. Null means this was the last page." }
-            items:
-              type: array
-              items:
-                type: object
-                required: [withdrawal_id, user_id, asset, network, status, process_status, requested_amount, sent_amount, fee, destination, transaction_hash, created_at, updated_at, age_seconds]
-                properties:
-                  withdrawal_id: { type: integer }
-                  user_id: { type: integer }
-                  asset: { type: string }
-                  network:
-                    type: string
-                    nullable: true
-                    description: "From asset_withdraw_networks.network_ticker. Can be an empty string for some records (observed on fiat/IRT rows) — a real DB value, not a join failure."
-                  status: { type: string, enum: [pending, verified, processing], description: "Only these three appear — the query already excludes completed/cancelled." }
-                  process_status:
-                    type: integer
-                    nullable: true
-                    description: "Raw integer from the withdraw-processor callback. Meaning not fully documented in source (0/1/2 observed); exposed as-is rather than guessed at. process_result (free-text) is deliberately NOT exposed — unconfirmed whether it can carry sensitive data."
-                  requested_amount: { type: string }
-                  sent_amount: { type: string }
-                  fee: { type: string }
-                  destination: { type: string, nullable: true, description: masked }
-                  transaction_hash: { type: string, nullable: true, description: masked }
-                  created_at: { type: string }
-                  updated_at: { type: string, nullable: true, description: "Null observed live when modified_at was never set on the row." }
-                  age_seconds: { type: integer, description: "See endpoint description for the stale-row caveat." }
-        meta: { $ref: '#/components/schemas/Meta' }
+            data:
+              type: object
+              required: [as_of, count_returned, next_cursor, items]
+              properties:
+                as_of: { type: string, format: date-time }
+                count_returned: { type: integer }
+                next_cursor: { type: string, nullable: true, description: "Pass as ?cursor= to get the next page. Null means this was the last page." }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [withdrawal_id, user_id, asset, network, status, process_status, requested_amount, sent_amount, fee, destination, transaction_hash, created_at, updated_at, age_seconds]
+                    properties:
+                      withdrawal_id: { type: integer }
+                      user_id: { type: integer }
+                      asset: { type: string }
+                      network:
+                        type: string
+                        nullable: true
+                        description: "From asset_withdraw_networks.network_ticker. Can be an empty string for some records (observed on fiat/IRT rows) — a real DB value, not a join failure."
+                      status: { type: string, enum: [pending, verified, processing], description: "Only these three appear — the query already excludes completed/cancelled." }
+                      process_status:
+                        type: integer
+                        nullable: true
+                        description: "Raw integer from the withdraw-processor callback. Meaning not fully documented in source (0/1/2 observed); exposed as-is rather than guessed at. process_result (free-text) is deliberately NOT exposed — unconfirmed whether it can carry sensitive data."
+                      requested_amount: { type: string }
+                      sent_amount: { type: string }
+                      fee: { type: string }
+                      destination: { type: string, nullable: true, description: masked }
+                      transaction_hash: { type: string, nullable: true, description: masked }
+                      created_at: { type: string }
+                      updated_at: { type: string, nullable: true, description: "Null observed live when modified_at was never set on the row." }
+                      age_seconds: { type: integer, description: "See endpoint description for the stale-row caveat." }
+
+    PendingDepositsResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [as_of, count_returned, next_cursor, items]
+              properties:
+                as_of: { type: string, format: date-time }
+                count_returned: { type: integer }
+                next_cursor: { type: string, nullable: true, description: "Pass as ?cursor= to get the next page. Null means this was the last page." }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [deposit_id, user_id, asset, network, status, collect_status, amount, net_amount, destination, transaction_hash, created_at, updated_at, age_seconds]
+                    properties:
+                      deposit_id: { type: integer }
+                      user_id: { type: integer }
+                      asset: { type: string }
+                      network:
+                        type: string
+                        nullable: true
+                        description: "From asset_deposit_networks.name — a human-readable name, not a short ticker (that table has no equivalent to withdrawals' network_ticker column). Observed live in Persian for IRT/fiat rows."
+                      status: { type: string, enum: [pending, processing], description: "Only these two appear — the query already excludes confirmed/rejected/unknown." }
+                      collect_status:
+                        type: integer
+                        nullable: true
+                        description: "Raw integer tracking movement of the deposit from the user's address into the exchange's own wallet ('collection'). Meaning not fully documented in source; exposed as-is rather than guessed at. collect_result (free-text) is deliberately NOT exposed — unconfirmed whether it can carry sensitive data, same reasoning as withdrawals' process_result."
+                      amount: { type: string }
+                      net_amount: { type: string }
+                      destination: { type: string, nullable: true, description: "masked. Observed null on old fiat/IRT rows where no deposit address applies." }
+                      transaction_hash: { type: string, nullable: true, description: masked }
+                      created_at: { type: string }
+                      updated_at: { type: string, nullable: true, description: "Null observed live when modified_at was never set on the row." }
+                      age_seconds: { type: integer, description: "See endpoint description for the stale-row caveat." }
+
+    LiabilitiesResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [ledger_snapshot_at, asset_count, negative_balance_count, liabilities]
+              properties:
+                ledger_snapshot_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: "The actual snapshot table's timestamp, not 'now' — see endpoint description for staleness. Null only if somehow resolved with no valid timestamp (shouldn't happen given the 503 on no-table-found)."
+                asset_count: { type: integer, description: "Count of distinct assets in the liabilities array below." }
+                negative_balance_count:
+                  type: integer
+                  description: "Rows in the snapshot with balance < 0, counted without exposing which user/asset — per the requirements doc's 'negative/invalid balance count without customer identities.' Observed live: 0 in production; a synthetic negative row exists in the staging fixtures to prove this field actually works."
+                liabilities:
+                  type: array
+                  items:
+                    type: object
+                    required: [asset, available, locked, total]
+                    properties:
+                      asset: { type: string, example: BTC }
+                      available: { type: string }
+                      locked: { type: string, description: "Frozen/held balance (slice_balance's t=2 rows)." }
+                      total: { type: string, description: "available + locked." }
+
+    TreasuryAssetsResponse:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [as_of, crypto, fiat]
+              properties:
+                as_of:
+                  type: string
+                  format: date-time
+                  description: "When this response was assembled — not a snapshot time like liabilities' ledger_snapshot_at, since treasury combines two independently-refreshed sources (manually-refreshed wallet balances, a 60s-cached Jibit balance)."
+                crypto:
+                  type: object
+                  required: [assets, wallets]
+                  properties:
+                    assets:
+                      type: array
+                      description: "Per-asset totals across all wallets, split by custody class."
+                      items:
+                        type: object
+                        required: [asset, by_custody_class, total]
+                        properties:
+                          asset: { type: string, example: BTC }
+                          by_custody_class:
+                            type: object
+                            description: "Keyed by hot/cold — only whichever classes have a nonzero contribution for this asset are present."
+                            properties:
+                              hot: { type: string }
+                              cold: { type: string }
+                          total: { type: string }
+                    wallets:
+                      type: array
+                      description: "One row per treasury_wallets record, ordered wallet_type asc, network asc, id asc."
+                      items:
+                        type: object
+                        required: [wallet_id, label, network, native_asset, custody_class, is_active, address, native_balance, tokens]
+                        properties:
+                          wallet_id: { type: integer }
+                          label: { type: string }
+                          network: { type: string, example: BSC }
+                          native_asset: { type: string, nullable: true, description: "Resolved from network via a fixed native-coin map; null if the network isn't in that map." }
+                          custody_class: { type: string, enum: [hot, cold] }
+                          is_active: { type: boolean }
+                          address: { type: string, description: "Masked." }
+                          native_balance: { type: string, nullable: true, description: "As of last_refreshed_at — manual-refresh-only, can be stale. See endpoint description." }
+                          last_refreshed_at: { type: string, format: date-time, nullable: true }
+                          last_refresh_error: { type: string, nullable: true, description: "If set, this wallet's data is stale/unreliable and a matching entry is also in the top-level quality.warnings array." }
+                          tokens:
+                            type: array
+                            items:
+                              type: object
+                              required: [symbol, balance]
+                              properties:
+                                symbol: { type: string, example: USDT }
+                                balance: { type: string, nullable: true }
+                                last_refreshed_at: { type: string, format: date-time, nullable: true }
+                                last_refresh_error: { type: string, nullable: true }
+                fiat:
+                  type: object
+                  required: [total_irt, accounts]
+                  properties:
+                    total_irt:
+                      type: string
+                      nullable: true
+                      description: "Sum of live Jibit Co-Bank balances across all active company_bank_accounts, deduplicated by IBAN. Null only if every account's balance fetch failed (see accounts[].error and quality.warnings) — not the same as a true zero balance."
+                    accounts:
+                      type: array
+                      description: "One row per unique active IBAN (duplicate active rows sharing an IBAN are collapsed to one; inactive rows are excluded entirely)."
+                      items:
+                        type: object
+                        required: [account_id, iban_masked, balance_irt]
+                        properties:
+                          account_id: { type: integer }
+                          iban_masked: { type: string }
+                          balance_irt: { type: string, nullable: true }
+                          fetched_at: { type: string, format: date-time, nullable: true, description: "Null when the balance came from an unexpired 60s cache entry originally written by exchange-admin's Accounting page (shared temp_data cache) rather than this request." }
+                          error: { type: string, nullable: true }
 
     OperationsResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [date_from, date_to, orders, deposits, withdrawals, pending_withdrawals, failed_deposits, fee_revenue_by_asset]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            date_from: { type: string, example: "2026-06-29 18:18:31" }
-            date_to: { type: string, example: "2026-07-29 18:18:31" }
-            orders: { type: integer }
-            deposits: { type: integer }
-            withdrawals: { type: integer }
-            pending_withdrawals: { type: integer }
-            failed_deposits: { type: integer }
-            fee_revenue_by_asset:
+            data:
               type: object
-              additionalProperties: { type: string, description: "Decimal amount as a string, not a float." }
-        meta: { $ref: '#/components/schemas/Meta' }
+              required: [date_from, date_to, orders, deposits, withdrawals, pending_withdrawals, failed_deposits, fee_revenue_by_asset]
+              properties:
+                date_from: { type: string, example: "2026-06-29 18:18:31" }
+                date_to: { type: string, example: "2026-07-29 18:18:31" }
+                orders: { type: integer }
+                deposits: { type: integer }
+                withdrawals: { type: integer }
+                pending_withdrawals: { type: integer }
+                failed_deposits: { type: integer }
+                fee_revenue_by_asset:
+                  type: object
+                  additionalProperties: { type: string, description: "Decimal amount as a string, not a float." }
 
     MarketSummaryResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [market, is_active, base_asset, quote_asset, last, open, high, low, volume, as_of]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            market: { type: string, example: BTC_USDT }
-            is_active: { type: boolean }
-            base_asset: { type: string }
-            quote_asset: { type: string }
-            last: { type: string }
-            open: { type: string }
-            high: { type: string }
-            low: { type: string }
-            volume: { type: string }
-            as_of: { type: string, format: date-time }
-        meta: { $ref: '#/components/schemas/Meta' }
+            data:
+              type: object
+              required: [market, is_active, base_asset, quote_asset, last, open, high, low, volume, as_of]
+              properties:
+                market: { type: string, example: BTC_USDT }
+                is_active: { type: boolean }
+                base_asset: { type: string }
+                quote_asset: { type: string }
+                last: { type: string }
+                open: { type: string }
+                high: { type: string }
+                low: { type: string }
+                volume: { type: string }
+                as_of: { type: string, format: date-time }
 
     UserSummaryResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [user_id, account_status, registered_at, kyc_level, operations, orders, last_successful_login_at]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            user_id: { type: integer }
-            account_status: { type: string, enum: [active, banned] }
-            registered_at: { type: string, example: "2025-03-01 10:22:00" }
-            kyc_level: { type: integer }
-            operations:
+            data:
               type: object
-              required: [deposit_enabled, withdraw_enabled, fiat_deposit_enabled, fiat_withdraw_enabled]
+              required: [user_id, account_status, registered_at, kyc_level, operations, orders, last_successful_login_at]
               properties:
-                deposit_enabled: { type: boolean }
-                withdraw_enabled: { type: boolean }
-                fiat_deposit_enabled: { type: boolean }
-                fiat_withdraw_enabled: { type: boolean }
-            orders:
-              type: object
-              required: [open, completed]
-              properties:
-                open: { type: integer }
-                completed: { type: integer }
-            last_successful_login_at: { type: string, nullable: true }
-        meta: { $ref: '#/components/schemas/Meta' }
+                user_id: { type: integer }
+                account_status: { type: string, enum: [active, banned] }
+                registered_at: { type: string, example: "2025-03-01 10:22:00" }
+                kyc_level: { type: integer }
+                operations:
+                  type: object
+                  required: [deposit_enabled, withdraw_enabled, fiat_deposit_enabled, fiat_withdraw_enabled]
+                  properties:
+                    deposit_enabled: { type: boolean }
+                    withdraw_enabled: { type: boolean }
+                    fiat_deposit_enabled: { type: boolean }
+                    fiat_withdraw_enabled: { type: boolean }
+                orders:
+                  type: object
+                  required: [open, completed]
+                  properties:
+                    open: { type: integer }
+                    completed: { type: integer }
+                last_successful_login_at: { type: string, nullable: true }
 
     BalancesResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [user_id, portfolio_value_irt, items]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            user_id: { type: integer }
-            portfolio_value_irt: { type: string }
-            items:
-              type: array
-              items:
-                type: object
-                required: [asset, available, blocked, total, mark_price_irt, value_irt, as_of]
-                properties:
-                  asset: { type: string }
-                  available: { type: string }
-                  blocked: { type: string }
-                  total: { type: string }
-                  mark_price_irt: { type: string, nullable: true, description: "Null if no direct or synthesized IRT price path exists." }
-                  value_irt: { type: string, nullable: true }
-                  as_of: { type: string, format: date-time }
-        meta: { $ref: '#/components/schemas/Meta' }
+            data:
+              type: object
+              required: [user_id, portfolio_value_irt, items]
+              properties:
+                user_id: { type: integer }
+                portfolio_value_irt: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [asset, available, blocked, total, mark_price_irt, value_irt, as_of]
+                    properties:
+                      asset: { type: string }
+                      available: { type: string }
+                      blocked: { type: string }
+                      total: { type: string }
+                      mark_price_irt: { type: string, nullable: true, description: "Null if no direct or synthesized IRT price path exists." }
+                      value_irt: { type: string, nullable: true }
+                      as_of: { type: string, format: date-time }
 
     TradesResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [user_id, date_from, date_to, items]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            user_id: { type: integer }
-            date_from: { type: string }
-            date_to: { type: string }
-            items:
-              type: array
-              items:
-                type: object
-                required: [order_id, market, side, amount, price, quote_amount, fee, executed_at]
-                properties:
-                  order_id: { type: integer }
-                  market: { type: string }
-                  side: { type: string, enum: [buy, sell] }
-                  role: { type: string, nullable: true, description: "Always null currently — maker/taker role is not populated by this endpoint yet." }
-                  amount: { type: string }
-                  price: { type: string }
-                  quote_amount: { type: string }
-                  fee: { type: string }
-                  executed_at: { type: string, format: date-time }
-        meta: { $ref: '#/components/schemas/Meta' }
+            data:
+              type: object
+              required: [user_id, date_from, date_to, items]
+              properties:
+                user_id: { type: integer }
+                date_from: { type: string }
+                date_to: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [order_id, market, side, amount, price, quote_amount, fee, executed_at]
+                    properties:
+                      order_id: { type: integer }
+                      market: { type: string }
+                      side: { type: string, enum: [buy, sell] }
+                      role: { type: string, nullable: true, description: "Always null currently — maker/taker role is not populated by this endpoint yet." }
+                      amount: { type: string }
+                      price: { type: string }
+                      quote_amount: { type: string }
+                      fee: { type: string }
+                      executed_at: { type: string, format: date-time }
 
     DepositsResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [user_id, date_from, date_to, items]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            user_id: { type: integer }
-            date_from: { type: string }
-            date_to: { type: string }
-            items:
-              type: array
-              items:
-                type: object
-                required: [deposit_id, asset, amount, net_amount, status, transaction_hash, destination, confirmed_at, created_at, cost_basis_mark_irt]
-                properties:
-                  deposit_id: { type: integer }
-                  asset: { type: string }
-                  amount: { type: string }
-                  net_amount: { type: string }
-                  status: { type: string, enum: [rejected, pending, confirmed, processing, unknown] }
-                  transaction_hash: { type: string, nullable: true, description: masked }
-                  destination: { type: string, nullable: true, description: masked }
-                  confirmed_at: { type: string, nullable: true }
-                  created_at: { type: string }
-                  cost_basis_mark_irt:
-                    type: string
-                    nullable: true
-                    description: "Always null today — not yet computed. Not present at all if this API adopts OpenAPI 3.1 (`type: [string, \"null\"]` there instead)."
-        meta: { $ref: '#/components/schemas/Meta' }
+            data:
+              type: object
+              required: [user_id, date_from, date_to, items]
+              properties:
+                user_id: { type: integer }
+                date_from: { type: string }
+                date_to: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [deposit_id, asset, amount, net_amount, status, transaction_hash, destination, confirmed_at, created_at, cost_basis_mark_irt]
+                    properties:
+                      deposit_id: { type: integer }
+                      asset: { type: string }
+                      amount: { type: string }
+                      net_amount: { type: string }
+                      status: { type: string, enum: [rejected, pending, confirmed, processing, unknown] }
+                      transaction_hash: { type: string, nullable: true, description: masked }
+                      destination: { type: string, nullable: true, description: masked }
+                      confirmed_at: { type: string, nullable: true }
+                      created_at: { type: string }
+                      cost_basis_mark_irt:
+                        type: string
+                        nullable: true
+                        description: "Always null today — not yet computed. Not present at all if this API adopts OpenAPI 3.1 (`type: [string, \"null\"]` there instead)."
 
     WithdrawalsResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [user_id, date_from, date_to, items]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            user_id: { type: integer }
-            date_from: { type: string }
-            date_to: { type: string }
-            items:
-              type: array
-              items:
-                type: object
-                required: [withdrawal_id, asset, requested_amount, sent_amount, fee, status, destination, transaction_hash, created_at, updated_at]
-                properties:
-                  withdrawal_id: { type: integer }
-                  asset: { type: string }
-                  requested_amount: { type: string }
-                  sent_amount: { type: string }
-                  fee: { type: string }
-                  status: { type: string, enum: [cancelled, completed, processing, verified, pending] }
-                  destination: { type: string, nullable: true, description: masked }
-                  transaction_hash: { type: string, nullable: true, description: masked }
-                  created_at: { type: string }
-                  updated_at: { type: string, nullable: true, description: "Null observed live (via /withdrawals/pending, same underlying column) when modified_at was never set on the row." }
-        meta: { $ref: '#/components/schemas/Meta' }
+            data:
+              type: object
+              required: [user_id, date_from, date_to, items]
+              properties:
+                user_id: { type: integer }
+                date_from: { type: string }
+                date_to: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [withdrawal_id, asset, requested_amount, sent_amount, fee, status, destination, transaction_hash, created_at, updated_at]
+                    properties:
+                      withdrawal_id: { type: integer }
+                      asset: { type: string }
+                      requested_amount: { type: string }
+                      sent_amount: { type: string }
+                      fee: { type: string }
+                      status: { type: string, enum: [cancelled, completed, processing, verified, pending] }
+                      destination: { type: string, nullable: true, description: masked }
+                      transaction_hash: { type: string, nullable: true, description: masked }
+                      created_at: { type: string }
+                      updated_at: { type: string, nullable: true, description: "Null observed live (via /withdrawals/pending, same underlying column) when modified_at was never set on the row." }
 
     PnlResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [user_id, currency, cost_basis, calculation_complete, incomplete_reason, execution_pnl, date_from, date_to]
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          required: [data]
           properties:
-            user_id: { type: integer }
-            currency: { type: string, example: IRT }
-            cost_basis: { type: string, example: weighted_average }
-            realized_pnl_irt: { type: string, nullable: true }
-            unrealized_pnl_irt: { type: string, nullable: true }
-            portfolio_value_irt: { type: string, nullable: true }
-            trading_fees_irt: { type: string, nullable: true }
-            calculation_complete: { type: boolean, description: "False today for every response — see incomplete_reason." }
-            incomplete_reason: { type: string, nullable: true, example: weighted_average_ledger_not_connected }
-            execution_pnl:
+            data:
               type: object
-              required: [amount_irt, calculated_orders, calculated_at]
+              required: [user_id, currency, cost_basis, calculation_complete, incomplete_reason, execution_pnl, date_from, date_to]
               properties:
-                amount_irt: { type: string }
-                calculated_orders: { type: integer }
-                calculated_at: { type: string, nullable: true }
-            date_from: { type: string }
-            date_to: { type: string }
-        meta: { $ref: '#/components/schemas/Meta' }
+                user_id: { type: integer }
+                currency: { type: string, example: IRT }
+                cost_basis: { type: string, example: weighted_average }
+                realized_pnl_irt: { type: string, nullable: true }
+                unrealized_pnl_irt: { type: string, nullable: true }
+                portfolio_value_irt: { type: string, nullable: true }
+                trading_fees_irt: { type: string, nullable: true }
+                calculation_complete: { type: boolean, description: "False today for every response — see incomplete_reason." }
+                incomplete_reason: { type: string, nullable: true, example: weighted_average_ledger_not_connected }
+                execution_pnl:
+                  type: object
+                  required: [amount_irt, calculated_orders, calculated_at]
+                  properties:
+                    amount_irt: { type: string }
+                    calculated_orders: { type: integer }
+                    calculated_at: { type: string, nullable: true }
+                date_from: { type: string }
+                date_to: { type: string }

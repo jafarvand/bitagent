@@ -5,8 +5,16 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url", "value": "{{base_url}}", "description": "Set in your environment, not here." },
-    { "key": "user_id", "value": "1", "description": "Override per-request or at the environment level; do not hardcode a specific user across the whole collection." }
+    {
+      "key": "base_url",
+      "value": "{{base_url}}",
+      "description": "Set in your environment, not here."
+    },
+    {
+      "key": "user_id",
+      "value": "1",
+      "description": "Override per-request or at the environment level; do not hardcode a specific user across the whole collection."
+    }
   ],
   "event": [
     {
@@ -66,26 +74,43 @@
           "pm.test('responds within 3s', () => pm.expect(pm.response.responseTime).to.be.below(3000));",
           "if (pm.response.code < 400) {",
           "    pm.test('status is 2xx', () => pm.response.to.be.success);",
-          "    pm.test('body has data and meta', () => {",
+          "    pm.test('envelope has data + all required v0.4 fields', () => {",
           "        const json = pm.response.json();",
-          "        pm.expect(json).to.have.property('data');",
-          "        pm.expect(json).to.have.property('meta');",
+          "        ['schema', 'tenant_id', 'source_id', 'owner', 'observed_at', 'generated_at',",
+          "         'freshness_sla_seconds', 'data_class', 'lineage', 'quality', 'data'].forEach(key => {",
+          "            pm.expect(json, key).to.have.property(key);",
+          "        });",
+          "        pm.expect(json.schema).to.have.property('name');",
+          "        pm.expect(json.schema).to.have.property('version');",
           "    });",
-          "    pm.test('meta.request_id matches the request we sent', () => {",
+          "    pm.test('request_id matches the request we sent', () => {",
           "        const json = pm.response.json();",
-          "        pm.expect(json.meta.request_id).to.eql(pm.collectionVariables.get('_last_request_id'));",
+          "        pm.expect(json.request_id).to.eql(pm.collectionVariables.get('_last_request_id'));",
           "    });",
-          "    pm.test('meta.data_freshness_seconds is a non-negative number', () => {",
+          "    pm.test('freshness_sla_seconds is a non-negative number', () => {",
           "        const json = pm.response.json();",
-          "        pm.expect(json.meta.data_freshness_seconds).to.be.a('number').and.to.be.at.least(0);",
+          "        pm.expect(json.freshness_sla_seconds).to.be.a('number').and.to.be.at.least(0);",
+          "    });",
+          "    pm.test('tenant_id is the expected single-tenant value', () => {",
+          "        pm.expect(pm.response.json().tenant_id).to.eql('bitimen');",
           "    });",
           "} else {",
-          "    pm.test('error body has error.code/message/request_id', () => {",
+          "    pm.test('error body has the full v0.4 error envelope', () => {",
           "        const json = pm.response.json();",
           "        pm.expect(json).to.have.nested.property('error.code');",
           "        pm.expect(json).to.have.nested.property('error.message');",
           "        pm.expect(json).to.have.nested.property('error.request_id');",
+          "        pm.expect(json).to.have.nested.property('error.retryable');",
+          "        pm.expect(json).to.have.nested.property('error.retry_after_seconds');",
+          "        pm.expect(json).to.have.nested.property('error.details');",
           "    });",
+          "    if (pm.response.code === 429) {",
+          "        pm.test('429 sets retryable=true and a retry_after_seconds', () => {",
+          "            const json = pm.response.json();",
+          "            pm.expect(json.error.retryable).to.eql(true);",
+          "            pm.expect(json.error.retry_after_seconds).to.be.a('number');",
+          "        });",
+          "    }",
           "}"
         ]
       }
@@ -100,24 +125,37 @@
           "event": [
             {
               "listen": "test",
-              "script": { "type": "text/javascript", "exec": [
-                "pm.test('status field is ok (not degraded)', () => {",
-                "    pm.expect(pm.response.json().data.status).to.eql('ok');",
-                "});",
-                "pm.test('all components report ok', () => {",
-                "    const c = pm.response.json().data.components;",
-                "    Object.keys(c).forEach(k => pm.expect(c[k].status, k).to.eql('ok'));",
-                "});",
-                "pm.test('client clock is within 60s of server (signing requirement)', () => {",
-                "    const skew = Math.abs(Math.floor(Date.now()/1000) - pm.response.json().data.server_time_unix);",
-                "    pm.expect(skew, 'clock skew in seconds').to.be.below(60);",
-                "});"
-              ] }
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is healthy (not degraded/maintenance)', () => {",
+                  "    pm.expect(pm.response.json().data.status).to.eql('healthy');",
+                  "});",
+                  "pm.test('all components report healthy', () => {",
+                  "    const c = pm.response.json().data.components;",
+                  "    Object.keys(c).forEach(k => pm.expect(c[k].status, k).to.eql('healthy'));",
+                  "});",
+                  "pm.test('client clock is within 60s of server (signing requirement)', () => {",
+                  "    const skew = Math.abs(Math.floor(Date.now()/1000) - pm.response.json().data.server_time_unix);",
+                  "    pm.expect(skew, 'clock skew in seconds').to.be.below(60);",
+                  "});"
+                ]
+              }
             }
           ],
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/health", "host": ["{{base_url}}"], "path": ["api","bot","health"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "health"
+              ]
+            }
           }
         },
         {
@@ -125,20 +163,34 @@
           "event": [
             {
               "listen": "test",
-              "script": { "type": "text/javascript", "exec": [
-                "// See README 'Data-quality trap' before wiring alerts off oldest_open_age_seconds —",
-                "// live data has shown 4+ year old stale rows still flagged open.",
-                "pm.test('has deposits and withdrawals breakdowns', () => {",
-                "    const d = pm.response.json().data;",
-                "    pm.expect(d).to.have.property('deposits');",
-                "    pm.expect(d).to.have.property('withdrawals');",
-                "});"
-              ] }
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// See README 'Data-quality trap' before wiring alerts off oldest_open_age_seconds —",
+                  "// live data has shown 4+ year old stale rows still flagged open.",
+                  "pm.test('has deposits and withdrawals breakdowns', () => {",
+                  "    const d = pm.response.json().data;",
+                  "    pm.expect(d).to.have.property('deposits');",
+                  "    pm.expect(d).to.have.property('withdrawals');",
+                  "});"
+                ]
+              }
             }
           ],
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/transactions/summary", "host": ["{{base_url}}"], "path": ["api","bot","transactions","summary"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/transactions/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "transactions",
+                "summary"
+              ]
+            }
           }
         },
         {
@@ -146,83 +198,418 @@
           "event": [
             {
               "listen": "test",
-              "script": { "type": "text/javascript", "exec": [
-                "pm.test('items only contain in-flight statuses', () => {",
-                "    const items = pm.response.json().data.items;",
-                "    items.forEach(it => pm.expect(['pending','verified','processing']).to.include(it.status));",
-                "});",
-                "if (pm.response.json().data.next_cursor) {",
-                "    pm.collectionVariables.set('_withdrawals_next_cursor', pm.response.json().data.next_cursor);",
-                "}"
-              ] }
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('items only contain in-flight statuses', () => {",
+                  "    const items = pm.response.json().data.items;",
+                  "    items.forEach(it => pm.expect(['pending','verified','processing']).to.include(it.status));",
+                  "});",
+                  "if (pm.response.json().data.next_cursor) {",
+                  "    pm.collectionVariables.set('_withdrawals_next_cursor', pm.response.json().data.next_cursor);",
+                  "}"
+                ]
+              }
             }
           ],
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/withdrawals/pending?limit={{limit}}", "host": ["{{base_url}}"], "path": ["api","bot","withdrawals","pending"], "query": [{"key":"limit","value":"{{limit}}"}] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/withdrawals/pending?limit={{limit}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "withdrawals",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
           }
         },
         {
           "name": "Withdrawals pending — next page (uses cursor from previous request)",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/withdrawals/pending?limit={{limit}}&cursor={{_withdrawals_next_cursor}}", "host": ["{{base_url}}"], "path": ["api","bot","withdrawals","pending"], "query": [{"key":"limit","value":"{{limit}}"},{"key":"cursor","value":"{{_withdrawals_next_cursor}}"}] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/withdrawals/pending?limit={{limit}}&cursor={{_withdrawals_next_cursor}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "withdrawals",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{_withdrawals_next_cursor}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Deposits pending (exchange-wide, cursor-paginated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('items only contain in-flight statuses', () => {",
+                  "    const items = pm.response.json().data.items;",
+                  "    items.forEach(it => pm.expect(['pending','processing']).to.include(it.status));",
+                  "});",
+                  "if (pm.response.json().data.next_cursor) {",
+                  "    pm.collectionVariables.set('_deposits_next_cursor', pm.response.json().data.next_cursor);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/bot/deposits/pending?limit={{limit}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "deposits",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Deposits pending — next page (uses cursor from previous request)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/bot/deposits/pending?limit={{limit}}&cursor={{_deposits_next_cursor}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "deposits",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{_deposits_next_cursor}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ledger liabilities (aggregate customer balances per asset)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('every liability row has asset/available/locked/total', () => {",
+                  "    const rows = pm.response.json().data.liabilities;",
+                  "    rows.forEach(r => {",
+                  "        pm.expect(r).to.have.property('asset');",
+                  "        pm.expect(r).to.have.property('available');",
+                  "        pm.expect(r).to.have.property('locked');",
+                  "        pm.expect(r).to.have.property('total');",
+                  "    });",
+                  "});",
+                  "pm.test('asset_count matches array length', () => {",
+                  "    const d = pm.response.json().data;",
+                  "    pm.expect(d.asset_count).to.eql(d.liabilities.length);",
+                  "});",
+                  "pm.test('no IRT valuation fields present (documented as not implemented)', () => {",
+                  "    const rows = pm.response.json().data.liabilities;",
+                  "    if (rows.length) pm.expect(rows[0]).to.not.have.property('value_irt');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/bot/ledger/liabilities",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "ledger",
+                "liabilities"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Treasury assets (crypto wallets + company IRT balance)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('crypto assets rows have asset/by_custody_class/total', () => {",
+                  "    const rows = pm.response.json().data.crypto.assets;",
+                  "    rows.forEach(r => {",
+                  "        pm.expect(r).to.have.property('asset');",
+                  "        pm.expect(r).to.have.property('by_custody_class');",
+                  "        pm.expect(r).to.have.property('total');",
+                  "    });",
+                  "});",
+                  "pm.test('crypto wallet rows have expected fields', () => {",
+                  "    const rows = pm.response.json().data.crypto.wallets;",
+                  "    rows.forEach(r => {",
+                  "        pm.expect(r).to.have.property('wallet_id');",
+                  "        pm.expect(r).to.have.property('network');",
+                  "        pm.expect(r).to.have.property('custody_class');",
+                  "        pm.expect(r).to.have.property('address');",
+                  "        pm.expect(r).to.have.property('tokens');",
+                  "    });",
+                  "});",
+                  "pm.test('fiat block present with total_irt and accounts', () => {",
+                  "    const fiat = pm.response.json().data.fiat;",
+                  "    pm.expect(fiat).to.have.property('total_irt');",
+                  "    pm.expect(fiat).to.have.property('accounts');",
+                  "    pm.expect(fiat.accounts).to.be.an('array');",
+                  "});",
+                  "pm.test('addresses and IBANs are masked', () => {",
+                  "    const wallets = pm.response.json().data.crypto.wallets;",
+                  "    wallets.forEach(w => { if (w.address) pm.expect(w.address).to.include('*'); });",
+                  "    const accounts = pm.response.json().data.fiat.accounts;",
+                  "    accounts.forEach(a => { if (a.iban_masked) pm.expect(a.iban_masked).to.include('*'); });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/bot/treasury/assets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "treasury",
+                "assets"
+              ]
+            }
           }
         },
         {
           "name": "Operations (aggregate deposits/withdrawals/orders)",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/operations?date_from={{date_from}}&date_to={{date_to}}", "host": ["{{base_url}}"], "path": ["api","bot","operations"], "query": [{"key":"date_from","value":"{{date_from}}"},{"key":"date_to","value":"{{date_to}}"}] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/operations?date_from={{date_from}}&date_to={{date_to}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "operations"
+              ],
+              "query": [
+                {
+                  "key": "date_from",
+                  "value": "{{date_from}}"
+                },
+                {
+                  "key": "date_to",
+                  "value": "{{date_to}}"
+                }
+              ]
+            }
           }
         },
         {
           "name": "Market summary",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/market/{{market}}/summary", "host": ["{{base_url}}"], "path": ["api","bot","market","{{market}}","summary"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/market/{{market}}/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "market",
+                "{{market}}",
+                "summary"
+              ]
+            }
           }
         },
         {
           "name": "User summary",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/summary", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","summary"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/user/{{user_id}}/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "user",
+                "{{user_id}}",
+                "summary"
+              ]
+            }
           }
         },
         {
           "name": "User balances",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/balances", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","balances"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/user/{{user_id}}/balances",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "user",
+                "{{user_id}}",
+                "balances"
+              ]
+            }
           }
         },
         {
           "name": "User trades",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/trades?limit={{limit}}", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","trades"], "query": [{"key":"limit","value":"{{limit}}"}] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/user/{{user_id}}/trades?limit={{limit}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "user",
+                "{{user_id}}",
+                "trades"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
           }
         },
         {
           "name": "User deposits",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/deposits?limit={{limit}}", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","deposits"], "query": [{"key":"limit","value":"{{limit}}"}] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/user/{{user_id}}/deposits?limit={{limit}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "user",
+                "{{user_id}}",
+                "deposits"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
           }
         },
         {
           "name": "User withdrawals",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/withdrawals?limit={{limit}}", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","withdrawals"], "query": [{"key":"limit","value":"{{limit}}"}] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/user/{{user_id}}/withdrawals?limit={{limit}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "user",
+                "{{user_id}}",
+                "withdrawals"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
           }
         },
         {
           "name": "User PnL",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/user/{{user_id}}/pnl", "host": ["{{base_url}}"], "path": ["api","bot","user","{{user_id}}","pnl"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/user/{{user_id}}/pnl",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "user",
+                "{{user_id}}",
+                "pnl"
+              ]
+            }
           }
         }
       ]
@@ -235,25 +622,41 @@
           "event": [
             {
               "listen": "prerequest",
-              "script": { "type": "text/javascript", "exec": [
-                "// Deliberately skip the collection-level pre-request signer for this one request.",
-                "pm.request.headers.remove('X-Bot-Key-ID');",
-                "pm.request.headers.remove('X-Request-Timestamp');",
-                "pm.request.headers.remove('X-Request-ID');",
-                "pm.request.headers.remove('X-Request-Signature');"
-              ] }
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Deliberately skip the collection-level pre-request signer for this one request.",
+                  "pm.request.headers.remove('X-Bot-Key-ID');",
+                  "pm.request.headers.remove('X-Request-Timestamp');",
+                  "pm.request.headers.remove('X-Request-ID');",
+                  "pm.request.headers.remove('X-Request-Signature');"
+                ]
+              }
             },
             {
               "listen": "test",
-              "script": { "type": "text/javascript", "exec": [
-                "pm.test('rejected with 401', () => pm.response.to.have.status(401));",
-                "pm.test('error code is service_auth_failed', () => pm.expect(pm.response.json().error.code).to.eql('service_auth_failed'));"
-              ] }
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error code is service_auth_failed', () => pm.expect(pm.response.json().error.code).to.eql('service_auth_failed'));"
+                ]
+              }
             }
           ],
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/operations", "host": ["{{base_url}}"], "path": ["api","bot","operations"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/operations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "operations"
+              ]
+            }
           }
         },
         {
@@ -261,31 +664,47 @@
           "event": [
             {
               "listen": "prerequest",
-              "script": { "type": "text/javascript", "exec": [
-                "const CryptoJS = require('crypto-js');",
-                "const secret = pm.environment.get('bot_secret');",
-                "const keyId = pm.environment.get('bot_key_id');",
-                "const path = '/api/bot/operations';",
-                "const ts = (Math.floor(Date.now() / 1000) - 300).toString();",
-                "const rid = pm.variables.replaceIn('{{$guid}}').toLowerCase();",
-                "const bodyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';",
-                "const sig = CryptoJS.HmacSHA256([ 'GET', path, '', ts, rid, bodyHash ].join('\\n'), secret).toString(CryptoJS.enc.Hex);",
-                "pm.request.headers.upsert({ key: 'X-Bot-Key-ID', value: keyId });",
-                "pm.request.headers.upsert({ key: 'X-Request-Timestamp', value: ts });",
-                "pm.request.headers.upsert({ key: 'X-Request-ID', value: rid });",
-                "pm.request.headers.upsert({ key: 'X-Request-Signature', value: sig });"
-              ] }
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const CryptoJS = require('crypto-js');",
+                  "const secret = pm.environment.get('bot_secret');",
+                  "const keyId = pm.environment.get('bot_key_id');",
+                  "const path = '/api/bot/operations';",
+                  "const ts = (Math.floor(Date.now() / 1000) - 300).toString();",
+                  "const rid = pm.variables.replaceIn('{{$guid}}').toLowerCase();",
+                  "const bodyHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';",
+                  "const sig = CryptoJS.HmacSHA256([ 'GET', path, '', ts, rid, bodyHash ].join('\\n'), secret).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'X-Bot-Key-ID', value: keyId });",
+                  "pm.request.headers.upsert({ key: 'X-Request-Timestamp', value: ts });",
+                  "pm.request.headers.upsert({ key: 'X-Request-ID', value: rid });",
+                  "pm.request.headers.upsert({ key: 'X-Request-Signature', value: sig });"
+                ]
+              }
             },
             {
               "listen": "test",
-              "script": { "type": "text/javascript", "exec": [
-                "pm.test('rejected with 401 (clock skew)', () => pm.response.to.have.status(401));"
-              ] }
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 401 (clock skew)', () => pm.response.to.have.status(401));"
+                ]
+              }
             }
           ],
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/operations", "host": ["{{base_url}}"], "path": ["api","bot","operations"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/operations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "operations"
+              ]
+            }
           }
         },
         {
@@ -293,23 +712,36 @@
           "event": [
             {
               "listen": "test",
-              "script": { "type": "text/javascript", "exec": [
-                "// First run: expect 200. Second run with the SAME X-Request-ID",
-                "// (Postman Runner 'repeat' with this as the only saved value,",
-                "// or manually copy _last_request_id and hardcode it below):",
-                "// expect 409 request_replayed.",
-                "pm.test('status is 200 or 409 (replay)', () => {",
-                "    pm.expect([200, 409]).to.include(pm.response.code);",
-                "});",
-                "if (pm.response.code === 409) {",
-                "    pm.test('error code is request_replayed', () => pm.expect(pm.response.json().error.code).to.eql('request_replayed'));",
-                "}"
-              ] }
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// First run: expect 200. Second run with the SAME X-Request-ID",
+                  "// (Postman Runner 'repeat' with this as the only saved value,",
+                  "// or manually copy _last_request_id and hardcode it below):",
+                  "// expect 409 request_replayed.",
+                  "pm.test('status is 200 or 409 (replay)', () => {",
+                  "    pm.expect([200, 409]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 409) {",
+                  "    pm.test('error code is request_replayed', () => pm.expect(pm.response.json().error.code).to.eql('request_replayed'));",
+                  "}"
+                ]
+              }
             }
           ],
           "request": {
             "method": "GET",
-            "url": { "raw": "{{base_url}}/api/bot/operations", "host": ["{{base_url}}"], "path": ["api","bot","operations"] }
+            "url": {
+              "raw": "{{base_url}}/api/bot/operations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bot",
+                "operations"
+              ]
+            }
           }
         }
       ]

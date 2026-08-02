@@ -8,6 +8,20 @@ demonstration data to a production-limited exchange intelligence service. The
 initial integration is read-only. Controlled actions are a separate, later
 scope and must use different credentials, routes, approvals, and network paths.
 
+## Current delivered exchange API
+
+The exchange team's copied OpenAPI contract is `0.8.0-pilot` at
+`docs/openapi.yaml`, with its Postman collection at
+`docs/bitAgent.postman_collection.json` and implementation notes at
+`docs/README.md`.
+
+The implemented signed, read-only routes are health, transaction summary,
+pending withdrawals/deposits, operations, market summary, ledger liabilities,
+treasury assets, and six user-scoped summary, balance, activity, and PnL routes.
+The remaining routes below are roadmap requirements and must not be reported as
+implemented until they appear in the exchange OpenAPI contract. bitAgent's
+`/exchange-api-test` page tracks the implemented OpenAPI surface directly.
+
 ## 1. Delivery priorities
 
 ### P0 — required before a read-only pilot

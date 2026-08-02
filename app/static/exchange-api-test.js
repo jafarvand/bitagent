@@ -2,7 +2,7 @@ const byId = id => document.getElementById(id);
 let catalog = [];
 
 function inputs() {
-  return {market: byId("api-market").value.trim().toUpperCase(), case_id: byId("api-case-id").value.trim() || "test-case"};
+  return {market: byId("api-market").value.trim().toUpperCase(), user_id: Number(byId("api-user-id").value), limit: Number(byId("api-limit").value)};
 }
 
 async function runTest(test, button) {
@@ -36,7 +36,7 @@ async function loadCatalog() {
   catalog = payload.tests;
   byId("api-mode").textContent = `${payload.mode} mode`;
   byId("api-mode").className = `pill ${payload.mode === "live" ? "good" : "warn"}`;
-  byId("api-base-url").textContent = `Exchange: ${payload.exchange_base_url} · credentials exposed: ${payload.credentials_exposed}`;
+  byId("api-base-url").textContent = `Exchange API ${payload.exchange_api_version} · ${payload.exchange_base_url} · credentials exposed: ${payload.credentials_exposed}`;
   byId("api-summary").textContent = `${catalog.length} read-only API checks available`;
   render();
 }

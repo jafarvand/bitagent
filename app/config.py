@@ -51,7 +51,8 @@ class Settings(BaseSettings):
         first_pair = self.exchange_bot_service_keys.split(",", 1)[0].strip()
         if ":" not in first_pair:
             return "", ""
-        key_id, secret = first_pair.split(":", 1)
+        parts = first_pair.split(":")
+        key_id, secret = parts[0], parts[1]
         return key_id.strip(), secret.strip()
 
 
