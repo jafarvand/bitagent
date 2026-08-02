@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import re
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
@@ -60,6 +61,19 @@ def test_dashboard_exposes_both_live_refresh_controls():
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
     assert ': "Data incomplete"' in script
+
+
+def test_dashboard_contains_every_required_javascript_dom_target():
+    html = client.get("/").text
+    script = client.get("/static/app.js").text
+    html_ids = set(re.findall(r'id="([^"]+)"', html))
+    javascript_ids = set(re.findall(r'\$\("([^"]+)"\)', script))
+
+    # audit-summary is an optional enhancement guarded by `if (!node) return`.
+    required_ids = javascript_ids - {"audit-summary"}
+    missing_ids = sorted(required_ids - html_ids)
+
+    assert not missing_ids, f"app.js references missing DOM targets: {missing_ids}"
 
 
 def test_status_reports_llm_configuration_without_credentials():

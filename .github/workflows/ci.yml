@@ -20,6 +20,31 @@ jobs:
       - run: python -m compileall -q app scripts tests
       - run: python -m pytest -q
 
+  production-image-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag bitagent:ci .
+      - run: docker run --detach --name bitagent-ci --publish 8999:8999 bitagent:ci
+      - name: Wait for the production image
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8999/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs bitagent-ci
+          exit 1
+      - name: Verify deployed UI assets and API
+        run: |
+          curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'id="freshness-summary"'
+          curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'app.js?v=2.12.0-market-quality'
+          curl --fail --silent 'http://127.0.0.1:8999/api/v0/dashboard?market=BTC_USDT&days=30' >/dev/null
+          curl --fail --silent 'http://127.0.0.1:8999/api/v0/trends?limit=30' >/dev/null
+      - if: always()
+        run: docker rm --force bitagent-ci
+
   dependency-audit:
     runs-on: ubuntu-latest
     steps:
