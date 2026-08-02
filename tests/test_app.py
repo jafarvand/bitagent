@@ -54,6 +54,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'aria-live="polite"' in response.text
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
+    assert 'id="freshness-summary"' in response.text
 
 
 def test_status_reports_llm_configuration_without_credentials():
