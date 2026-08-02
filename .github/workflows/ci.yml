@@ -39,7 +39,10 @@ jobs:
       - name: Verify deployed UI assets and API
         run: |
           curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'id="freshness-summary"'
-          curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'app.js?v=2.13.0'
+          curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'app.js?v=2.13.1'
+          curl --fail --silent http://127.0.0.1:8999/api/v0/agents | grep --quiet 'market-risk'
+          curl --fail --silent http://127.0.0.1:8999/agents/operations | grep --quiet 'agent-chat.js?v=2.13.1-agents'
+          curl --fail --silent http://127.0.0.1:8999/knowledge | grep --quiet 'knowledge.js?v=2.13.1-knowledge'
           curl --fail --silent 'http://127.0.0.1:8999/api/v0/dashboard?market=BTC_USDT&days=30' >/dev/null
           curl --fail --silent 'http://127.0.0.1:8999/api/v0/trends?limit=30' >/dev/null
           curl --fail --silent -H 'X-BitAgent-Role: operator' 'http://127.0.0.1:8999/api/v0/exchange/transaction-intelligence?limit=5' >/dev/null

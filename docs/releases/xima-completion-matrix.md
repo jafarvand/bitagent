@@ -1,7 +1,7 @@
 # XIMA Completion Matrix
 
 Assessment date: 2026-08-02
-Software release: `2.13.0`
+Software release: `2.13.1`
 Authority: `docs/planning/project-plan.md`
 
 This matrix separates repository-complete capabilities from exchange-side and
@@ -12,7 +12,7 @@ owner exercise, or steering approval exists.
 
 | Approved-plan requirement | Repository evidence | Software status | Remaining external evidence |
 |---|---|---|---|
-| Secure foundation | RBAC/refusal policy, hash audits, component registry, CI scans, platform baseline | Complete | Production OIDC/MFA, vault, rotation/revocation, environment and access-review proof |
+| Secure foundation | RBAC/refusal policy, hash audits, domain-bound agent chats, component registry, CI scans, platform baseline | Complete | Production OIDC/MFA, vault, rotation/revocation, environment and access-review proof |
 | Data/integration layer | XIMA evidence contracts, lineage, quality, freshness, replay, source health, resilient GET gateway, exchange API 0.8 contract parity | Complete | Working production credential, remaining E1–E7 roadmap APIs/events, SLAs and owner evidence |
 | Operations intelligence | Service/dependency/error/latency/capacity, queue/worker, incidents, dedupe, runbook | Complete | Live operations sources and owner-labeled incident outcomes |
 | Market/risk intelligence | Spread, depth, volatility, abnormal activity, exposure, concentration, limit breaches | Complete | Order books, trades/candles, exposure/limit feeds and independent owner fixtures |
@@ -30,7 +30,7 @@ owner exercise, or steering approval exists.
 
 | Epic | Implemented software | Exchange/external dependency that remains |
 |---|---|---|
-| A — Platform/integration | Auth v0.2 client, v0.4 envelope validation, OpenAPI parity, replay, freshness, quality, retry/circuit/telemetry | Exchange currently rejects the updated key with `service_auth_failed`; rate/SLA confirmation and live event ingestion remain |
+| A — Platform/integration | Auth v0.2 client, v0.4 envelope validation, OpenAPI parity, replay, freshness, quality, retry/circuit/telemetry | Staging authentication succeeds on all 14 routes; three matching-engine-backed routes return structured dependency failures, while rate/SLA confirmation and live event ingestion remain |
 | B — Operations | Dependency, errors, latency, queues/workers, capacity, incidents, similar refs, runbook, brief inputs | Required upstream operations endpoints and outcome labels |
 | C — Market/risk | Spread/depth, volatility, abnormal activity, exposure/concentration, breaches, quality brief | Order-book, trades, candle, exposure and limit endpoints |
 | D — Treasury | v0.7 liabilities and v0.8 treasury adapters, coverage, wallet quality, reconciliation, aging, brief | Production credential repair, live treasury end-to-end proof, owner tolerance policy and custodian/chain expansion |
@@ -42,10 +42,10 @@ owner exercise, or steering approval exists.
 ## Current production decision
 
 The repository is software-complete for the versioned XIMA plan through
-`2.13.0`, but it is **not approved for a production-controlled-action launch**.
-The next concrete dependency is repairing the exchange-side registration for
-the updated key (all 14 current routes return `service_auth_failed`), followed
-by the remaining E1–E8 delivery and evidence package described in
+`2.13.1`, but it is **not approved for a production-controlled-action launch**.
+The next concrete exchange dependency is restoring the staging matching-engine
+balance, trade-history, and market services, followed by the remaining E1–E8
+delivery and evidence package described in
 `docs/integration/exchange-side-requirements.md`.
 
 Read-only production pilot eligibility must be decided from actual source,

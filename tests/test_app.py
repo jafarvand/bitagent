@@ -16,7 +16,7 @@ from app import mock_data
 from app.config import settings
 from app.chat import build_prompt
 from app.chat import chat_rate_limiter
-from app.exchange import ExchangeClient, exchange_client
+from app.exchange import ExchangeAPIError, ExchangeClient, exchange_client
 from app.exchange_v08 import ExchangeContractError, validate_envelope
 from app.evidence import backup_and_verify, record_dashboard
 from app.main import app
@@ -46,7 +46,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.13.0"
+    assert response.json()["version"] == "2.13.1"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -59,7 +59,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.13.0' in response.text
+    assert '/static/app.js?v=2.13.1' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -79,6 +79,111 @@ def test_dashboard_contains_every_required_javascript_dom_target():
     assert not missing_ids, f"app.js references missing DOM targets: {missing_ids}"
 
 
+def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
+    catalog = client.get(
+        "/api/v0/agents", headers={"X-BitAgent-Role": "operator"}
+    ).json()
+
+    assert catalog["count"] == 8
+    assert [agent["id"] for agent in catalog["agents"]] == [
+        "operations", "market-risk", "treasury", "aml-fraud",
+        "security", "support", "executive", "governance",
+    ]
+    assert all(len(agent["samples"]) >= 3 for agent in catalog["agents"])
+    assert all(agent["path"] == f"/agents/{agent['id']}" for agent in catalog["agents"])
+
+    html = client.get("/agents/operations").text
+    script = client.get("/static/agent-chat.js").text
+    html_ids = set(re.findall(r'id="([^"]+)"', html))
+    script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
+    assert not sorted(script_ids - html_ids)
+    assert 'agent-chat.js?v=2.13.1-agents' in html
+    assert client.get("/agents/not-an-agent").status_code == 404
+
+
+def test_knowledge_wizard_has_complete_dom_targets():
+    html = client.get("/knowledge").text
+    script = client.get("/static/knowledge.js").text
+    html_ids = set(re.findall(r'id="([^"]+)"', html))
+    script_ids = set(re.findall(r'kb\("([^"]+)"\)', script))
+
+    assert client.get("/knowledge").status_code == 200
+    assert not sorted(script_ids - html_ids)
+    assert "DOCUMENT WIZARD" in html
+    assert "Test document Q&amp;A" in html
+    assert 'knowledge.js?v=2.13.1-knowledge' in html
+
+
+def test_knowledge_wizard_process_and_grounded_qa_flow():
+    document = {
+        "tenant_id": "wizard-exchange", "document_id": "withdrawal-rule",
+        "title": "Withdrawal approval rule", "document_type": "policy",
+        "version": "1.0.0", "owner": "compliance", "approval_status": "approved",
+        "approved_by_role": "compliance", "effective_at": "2025-01-01T00:00:00Z",
+        "expires_at": "2099-01-01T00:00:00Z", "data_class": "internal",
+        "allowed_roles": ["operator", "admin"],
+        "keywords": ["withdrawal", "approval", "manual", "review"],
+        "content": "Every flagged withdrawal requires manual compliance review before approval.",
+        "source_ref": "exchange-policy:withdrawal-rule",
+    }
+    created = client.post(
+        "/api/v0/xima/knowledge/documents",
+        headers={"X-BitAgent-Role": "admin"}, json=document,
+    )
+    answered = client.post(
+        "/api/v0/xima/knowledge/qa",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "wizard-exchange", "question": "How is a withdrawal approved?"},
+    )
+    missing = client.post(
+        "/api/v0/xima/knowledge/qa",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "another-exchange", "question": "How is a withdrawal approved?"},
+    )
+
+    assert created.status_code == 201
+    assert created.json()["document"]["content_hash"]
+    assert answered.status_code == 200
+    assert answered.json()["result"]["status"] == "answered"
+    assert answered.json()["result"]["citations"][0]["document_id"] == "withdrawal-rule"
+    assert answered.json()["result"]["action_executed"] is False
+    assert missing.json()["result"]["status"] == "insufficient_evidence"
+    assert missing.json()["result"]["answer"] is None
+
+
+@pytest.mark.parametrize(
+    "agent_domain",
+    ["operations", "market-risk", "treasury", "aml-fraud", "security", "support", "executive", "governance"],
+)
+def test_each_agent_chat_is_domain_bound_and_audited(agent_domain):
+    client.get("/api/v0/dashboard")
+    response = client.post(
+        "/api/v0/chat",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"agent": agent_domain, "question": "How many withdrawals are pending?"},
+    )
+    audit = client.get(
+        "/api/v0/audit/chat/recent",
+        headers={"X-BitAgent-Role": "admin"},
+    ).json()["items"][0]
+
+    assert response.status_code == 200
+    assert response.json()["agent"] == agent_domain
+    assert audit["agent_domain"] == agent_domain
+    assert response.json()["action_executed"] is False
+
+
+def test_chat_rejects_unknown_agent_domain():
+    client.get("/api/v0/dashboard")
+    response = client.post(
+        "/api/v0/chat",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"agent": "unrestricted-super-agent", "question": "Show evidence"},
+    )
+
+    assert response.status_code == 422
+
+
 def test_exchange_api_test_page_lists_every_documented_read_endpoint():
     page = client.get("/exchange-api-test")
     catalog = client.get(
@@ -87,7 +192,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.13.0' in page.text
+    assert 'exchange-api-test.js?v=2.13.1' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -259,6 +364,40 @@ def test_user_investigation_consumes_all_six_routes_without_raw_records():
     assert body["action_executed"] is False
 
 
+def test_user_investigation_degrades_partially_when_matching_engine_is_unavailable(monkeypatch):
+    monkeypatch.setattr(settings, "bitagent_mode", "live")
+
+    async def staging_get(path, params=None):
+        kind = path.rsplit("/", 1)[-1]
+        if kind == "balances":
+            raise ExchangeAPIError("HTTP 502: balance_service_failed")
+        if kind == "trades":
+            raise ExchangeAPIError("HTTP 502: trade_history_failed")
+        return mock_data.user_dataset(42, kind)
+
+    monkeypatch.setattr(exchange_client, "get", staging_get)
+    response = client.get(
+        "/api/v0/exchange/users/42/investigation?days=7&limit=5",
+        headers={"X-BitAgent-Role": "operator"},
+    )
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["status"] == "partial"
+    assert body["confidence"] == "limited"
+    assert body["portfolio"] == {
+        "available": False, "asset_count": None, "portfolio_value_irt": None,
+    }
+    assert body["activity_counts"] == {
+        "trades": None, "deposits": 1, "withdrawals": 1,
+    }
+    assert body["source_errors"] == {
+        "balances": "HTTP 502: balance_service_failed",
+        "trades": "HTTP 502: trade_history_failed",
+    }
+    assert body["sensitive_records_exposed"] is False
+
+
 def test_status_reports_llm_configuration_without_credentials():
     body = client.get("/api/v0/status").json()
 
@@ -275,7 +414,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.13.0"
+    assert body["version"] == "2.13.1"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -409,7 +548,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.13.0",
+        "version": "2.13.1",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -942,7 +1081,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.13.0"
+    assert report["version"] == "2.13.1"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1037,7 +1176,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.13.0"
+    assert manifest["current_version"] == "2.13.1"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

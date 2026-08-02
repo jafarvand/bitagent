@@ -73,7 +73,9 @@ def _connect(path: str) -> sqlite3.Connection:
             evidence_record_id INTEGER,
             success INTEGER NOT NULL,
             error_code TEXT,
-            audit_hash TEXT NOT NULL UNIQUE
+            audit_hash TEXT NOT NULL UNIQUE,
+            session_id TEXT NOT NULL DEFAULT '',
+            agent_domain TEXT NOT NULL DEFAULT 'operations'
         )
         """
     )
@@ -84,6 +86,10 @@ def _connect(path: str) -> sqlite3.Connection:
     if "session_id" not in chat_columns:
         connection.execute(
             "ALTER TABLE chat_audit ADD COLUMN session_id TEXT NOT NULL DEFAULT ''"
+        )
+    if "agent_domain" not in chat_columns:
+        connection.execute(
+            "ALTER TABLE chat_audit ADD COLUMN agent_domain TEXT NOT NULL DEFAULT 'operations'"
         )
     return connection
 
@@ -366,6 +372,7 @@ def record_chat(
     success: bool,
     error_code: str | None = None,
     session_id: str = "",
+    agent_domain: str = "operations",
 ) -> dict:
     created_at = datetime.now(UTC).isoformat()
     safe_question = question[:2000]
@@ -381,6 +388,7 @@ def record_chat(
             "success": success,
             "error_code": error_code,
             "session_id": session_id,
+            "agent_domain": agent_domain,
         }
     )
     audit_hash = hashlib.sha256(material.encode()).hexdigest()
@@ -389,8 +397,9 @@ def record_chat(
             """
             INSERT INTO chat_audit (
                 created_at, role, model, question_text, answer_text,
-                evidence_record_id, success, error_code, audit_hash, session_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                evidence_record_id, success, error_code, audit_hash, session_id,
+                agent_domain
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 created_at,
@@ -403,6 +412,7 @@ def record_chat(
                 error_code,
                 audit_hash,
                 session_id,
+                agent_domain,
             ),
         )
     return {
@@ -417,7 +427,7 @@ def recent_chat_audit(path: str, limit: int) -> list[dict]:
         rows = connection.execute(
             """
             SELECT id, created_at, role, model, evidence_record_id, success,
-                   error_code, audit_hash, session_id
+                   error_code, audit_hash, session_id, agent_domain
             FROM chat_audit ORDER BY id DESC LIMIT ?
             """,
             (limit,),
@@ -435,7 +445,7 @@ def chat_session_messages(
         rows = connection.execute(
             """
             SELECT id, created_at, role, model, question_text, answer_text,
-                   evidence_record_id, success, error_code, audit_hash
+                   evidence_record_id, success, error_code, audit_hash, agent_domain
             FROM chat_audit
             WHERE session_id = ? AND (? = 'admin' OR role = ?)
             ORDER BY id ASC LIMIT ?
@@ -453,7 +463,7 @@ def chat_session_audit(path: str, session_id: str, limit: int) -> list[dict]:
         rows = connection.execute(
             """
             SELECT id, created_at, role, model, evidence_record_id, success,
-                   error_code, audit_hash, session_id
+                   error_code, audit_hash, session_id, agent_domain
             FROM chat_audit WHERE session_id = ?
             ORDER BY id ASC LIMIT ?
             """,

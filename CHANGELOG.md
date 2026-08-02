@@ -2,6 +2,13 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.13.1] - 2026-08-02
+
+- Added eight separate domain-bound agent chat pages with sample questions and agent identity retained in every chat audit record.
+- Added graceful partial user investigations when staging matching-engine balance/trade sources are unavailable.
+- Added a reproducible exchange-team staging report covering all 14 signed API routes, owners, and acceptance evidence.
+- Added a governed knowledge-base wizard for document import, policy metadata processing, receipts, and citation-backed Q&A testing.
+
 ## [2.13.0] - 2026-08-02
 
 - Rebuilt the signed connector and direct API console against exchange OpenAPI `0.8.0-pilot` and its 14 implemented read endpoints.

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>bitAgent · Domain Agents</title>
+  <link rel="stylesheet" href="/static/styles.css?v=2.13.1-agents">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">b</span><span>bitAgent</span></a>
+    <div class="top-actions"><a class="refresh-button api-link" href="/">Dashboard</a><a class="refresh-button api-link" href="/exchange-api-test">API tests</a><span class="release-chip">8 READ-ONLY AGENTS</span></div>
+  </header>
+  <main class="agent-shell">
+    <aside class="panel agent-sidebar"><p class="eyebrow">DOMAIN AGENTS</p><nav id="agent-nav" aria-label="Agent workspaces"></nav></aside>
+    <section class="panel agent-workspace">
+      <div class="panel-head"><div><p id="agent-eyebrow" class="eyebrow">DOMAIN WORKSPACE</p><h1 id="agent-name">Loading agent…</h1></div><span id="agent-state" class="pill neutral">read only</span></div>
+      <p id="agent-description" class="intro"></p>
+      <div class="agent-boundary"><strong>Evidence boundary</strong><span>This workspace uses retained, cited evidence only. Missing domain evidence produces a limitation—not an invented conclusion. No exchange action can be executed.</span></div>
+      <section class="agent-samples"><p class="eyebrow">SAMPLE QUESTIONS</p><div id="agent-sample-list"></div></section>
+      <div id="agent-messages" class="chat-messages agent-messages" aria-live="polite"><div class="chat-message assistant">Choose a sample question or ask your own evidence question.</div></div>
+      <form id="agent-form" class="chat-form"><label for="agent-question">Question for this agent</label><div><input id="agent-question" maxlength="2000" autocomplete="off" required><button id="agent-send" type="submit">Ask agent</button></div></form>
+      <p id="agent-meta" class="chat-meta">Domain-bound · operator role · audited · no action capability</p>
+    </section>
+  </main>
+  <script src="/static/agent-chat.js?v=2.13.1-agents"></script>
+</body>
+</html>

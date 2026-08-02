@@ -157,39 +157,51 @@ def reconcile_treasury(liabilities: dict, treasury: dict) -> dict:
 
 
 def summarize_user_investigation(
-    summary: dict, balances: dict, trades: dict, deposits: dict, withdrawals: dict, pnl: dict,
+    summary: dict | None, balances: dict | None, trades: dict | None,
+    deposits: dict | None, withdrawals: dict | None, pnl: dict | None,
+    source_errors: dict[str, str] | None = None,
 ) -> dict:
     expected = ["userSummary", "balances", "trades", "deposits", "withdrawals", "pnl"]
     payloads = [summary, balances, trades, deposits, withdrawals, pnl]
     for payload, schema in zip(payloads, expected):
-        validate_envelope(payload, schema)
+        if payload is not None:
+            validate_envelope(payload, schema)
+    if summary is None:
+        raise ExchangeContractError("user summary is required for an investigation")
     user = summary["data"]
-    pnl_data = pnl["data"]
+    balance_data = balances["data"] if balances else {}
+    pnl_data = pnl["data"] if pnl else {}
+    errors = source_errors or {}
     return {
-        "status": "ready",
+        "status": "partial" if errors else "ready",
+        "confidence": "limited" if errors else "high",
         "user_id": user["user_id"],
         "account_status": user["account_status"],
         "kyc_level": user["kyc_level"],
         "operations": user["operations"],
         "orders": user["orders"],
         "portfolio": {
-            "asset_count": len(balances["data"].get("items", [])),
-            "portfolio_value_irt": balances["data"].get("portfolio_value_irt"),
+            "available": balances is not None,
+            "asset_count": len(balance_data.get("items", [])) if balances else None,
+            "portfolio_value_irt": balance_data.get("portfolio_value_irt"),
         },
         "activity_counts": {
-            "trades": len(trades["data"].get("items", [])),
-            "deposits": len(deposits["data"].get("items", [])),
-            "withdrawals": len(withdrawals["data"].get("items", [])),
+            "trades": len(trades["data"].get("items", [])) if trades else None,
+            "deposits": len(deposits["data"].get("items", [])) if deposits else None,
+            "withdrawals": len(withdrawals["data"].get("items", [])) if withdrawals else None,
         },
         "pnl": {
-            "calculation_complete": pnl_data.get("calculation_complete", False),
+            "available": pnl is not None,
+            "calculation_complete": pnl_data.get("calculation_complete", False) if pnl else None,
             "incomplete_reason": pnl_data.get("incomplete_reason"),
             "execution_pnl": pnl_data.get("execution_pnl"),
         },
+        "source_errors": errors,
         "sensitive_records_exposed": False,
         "limitations": [
             "Transaction rows, addresses, hashes, and per-asset balances are minimized from this response.",
             "Execution PnL is not complete PnL until the weighted-average ledger is connected.",
+            *(["One or more exchange dependencies were unavailable; conclusions are partial."] if errors else []),
         ],
         "action_executed": False,
     }

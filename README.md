@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.13.0 — Exchange API 0.8 Intelligence Integration**
+Current release: **2.13.1 — Domain Agent Workspaces and Staging Hardening**
 
 ## What the current release provides
 
@@ -14,6 +14,7 @@ Current release: **2.13.0 — Exchange API 0.8 Intelligence Integration**
 - Transaction summary plus cursor-paginated pending deposit/withdrawal intelligence
 - Ledger liabilities, treasury assets, and operational reconciliation
 - Minimized six-source user investigation with explicit incomplete-PnL handling
+- Eight domain-bound chat workspaces with tailored sample questions and audited agent identity
 - Feature/API coverage matrix and explicit remaining queue, worker, network, order-book, and production-evidence gaps
 - Mock mode for safe local evaluation
 - Live mode using the exchange's current HMAC protocol
@@ -32,6 +33,11 @@ docker compose up --build
 Open <http://localhost:8999>.
 The direct read-only exchange API console is at
 <http://localhost:8999/exchange-api-test>.
+The eight domain chat workspaces are available from <http://localhost:8999/agents>.
+The governed exchange policy and rules wizard is at <http://localhost:8999/knowledge>.
+
+Exchange-team staging results and required actions are recorded in
+[`docs/integration/exchange-api-0.8-staging-test-report.md`](docs/integration/exchange-api-0.8-staging-test-report.md).
 
 For the production host, where the external `nginx-proxy` network and ACME
 challenge directory already exist, apply the production override explicitly:
@@ -83,6 +89,7 @@ uvicorn app.main:app --reload
 ## API
 
 - `GET /api/v0/status`
+- `GET /api/v0/agents` and `/agents/{agent}` for eight domain-bound chat workspaces
 - `GET /api/v0/features`
 - `GET /api/v0/dashboard?market=BTC_USDT&days=30`
 - `GET /api/v0/evidence/recent?limit=20`
@@ -205,7 +212,8 @@ answers score zero and are never omitted from the overall result.
 | 2.10.0 | Cross-domain executive priorities, coverage, KPI and evidence brief | Complete |
 | 2.11.0 | Bounded retry/circuit telemetry, secure CI, and platform operations baseline | Complete |
 | 2.12.0 | Tenant-scoped append-only agent output feed and integrity verification | Complete |
-| 2.13.0 | Exchange API 0.8 contract validation, transaction intelligence, treasury reconciliation, and minimized user investigation | Current |
+| 2.13.0 | Exchange API 0.8 contract validation, transaction intelligence, treasury reconciliation, and minimized user investigation | Complete |
+| 2.13.1 | Eight domain agent workspaces, partial-source investigation resilience, and staging exchange-team report | Current |
 
 ## Project documents
 

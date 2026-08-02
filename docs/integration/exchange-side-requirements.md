@@ -15,6 +15,9 @@ The exchange team's copied OpenAPI contract is `0.8.0-pilot` at
 `docs/bitAgent.postman_collection.json` and implementation notes at
 `docs/README.md`.
 
+The latest staging execution and exchange-team action report is
+`docs/integration/exchange-api-0.8-staging-test-report.md`.
+
 The implemented signed, read-only routes are health, transaction summary,
 pending withdrawals/deposits, operations, market summary, ledger liabilities,
 treasury assets, and six user-scoped summary, balance, activity, and PnL routes.
@@ -22,7 +25,7 @@ The remaining routes below are roadmap requirements and must not be reported as
 implemented until they appear in the exchange OpenAPI contract. bitAgent's
 `/exchange-api-test` page tracks the implemented OpenAPI surface directly.
 
-bitAgent release `2.13.0` consumes this surface through three fail-closed,
+bitAgent release `2.13.1` consumes this surface through three fail-closed,
 read-only intelligence routes: `/api/v0/exchange/transaction-intelligence`,
 `/api/v0/exchange/treasury-intelligence`, and
 `/api/v0/exchange/users/{user_id}/investigation`. CI compares the allowlisted

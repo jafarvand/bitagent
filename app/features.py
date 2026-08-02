@@ -1,5 +1,12 @@
 FEATURES = [
     {
+        "id": "domain-agent-chats",
+        "name": "Eight domain agent chats",
+        "status": "available",
+        "source": "/agents/{operations|market-risk|treasury|aml-fraud|security|support|executive|governance}",
+        "description": "Separate domain-bound, sampled, cited, audited, read-only chat workspaces.",
+    },
+    {
         "id": "readonly-chat",
         "name": "Read-only evidence chat",
         "status": "available",

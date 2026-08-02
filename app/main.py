@@ -97,8 +97,8 @@ from app.xima_treasury import TreasuryAnalysisRequest, analyze_treasury
 from app.xima_aml import AMLAnalysisRequest, AMLFeedbackRequest, analyze_aml, record_aml_feedback
 from app.xima_security import SecurityAnalysisRequest, analyze_security
 from app.xima_support import (
-    KnowledgeDocumentRequest, SupportTicketRequest, analyze_support,
-    ingest_knowledge, retrieve_knowledge,
+    KnowledgeDocumentRequest, KnowledgeQuestionRequest, SupportTicketRequest,
+    analyze_support, answer_knowledge_question, ingest_knowledge, retrieve_knowledge,
 )
 from app.xima_governance import (
     EvaluationRequest as XimaEvaluationRequest, RegistryEntryRequest,
@@ -111,7 +111,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.13.0"
+VERSION = "2.13.1"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -123,6 +123,40 @@ EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.7", "status": "implemented", "capability": "Aggregate ledger liabilities", "evidence": "/api/v0/exchange/treasury-intelligence"},
     {"version": "0.8", "status": "implemented", "capability": "Treasury crypto/fiat assets and quality warnings", "evidence": "/api/v0/exchange/treasury-intelligence"},
 ]
+AGENT_CHAT_DEFINITIONS = {
+    "operations": {
+        "name": "Operations Agent", "description": "Exchange health, transaction flow, backlogs, incidents, and runbooks.",
+        "samples": ["How many withdrawals are pending?", "What changed in the retained withdrawal trend?", "What evidence limits the current root-cause conclusion?"],
+    },
+    "market-risk": {
+        "name": "Market & Risk Agent", "description": "Market snapshots, range quality, liquidity limitations, and risk evidence.",
+        "samples": ["What is the current market-range risk?", "Is the latest market snapshot complete?", "What liquidity evidence is still unavailable?"],
+    },
+    "treasury": {
+        "name": "Treasury Agent", "description": "Assets, liabilities, custody quality, coverage, and reconciliation boundaries.",
+        "samples": ["What treasury evidence is currently available?", "Are assets and liabilities fully reconciled?", "What prevents a proof-of-reserves conclusion?"],
+    },
+    "aml-fraud": {
+        "name": "AML & Fraud Agent", "description": "Governed case evidence, risk factors, queues, and mandatory human review.",
+        "samples": ["What AML evidence is available to this agent?", "Can the current evidence support a fraud conclusion?", "Which AML decisions require human review?"],
+    },
+    "security": {
+        "name": "Security Agent", "description": "Authentication, privileged activity, security incidents, and access boundaries.",
+        "samples": ["Is the retained evidence chain valid?", "What security telemetry is still missing?", "Can this agent reveal API keys or secrets?"],
+    },
+    "support": {
+        "name": "Support Agent", "description": "Safe evidence explanations, escalation, governed knowledge, and PII boundaries.",
+        "samples": ["Explain the withdrawal warning for a support operator.", "What can I tell a customer without exposing private data?", "When should this issue be escalated?"],
+    },
+    "executive": {
+        "name": "Executive Agent", "description": "Cross-domain priorities, readiness, confidence, limitations, and owner actions.",
+        "samples": ["Give me the current executive brief.", "What are today's highest priorities?", "Is the system ready for unrestricted go-live?"],
+    },
+    "governance": {
+        "name": "Governance Agent", "description": "Policy, auditability, readiness gates, prohibited actions, and evidence quality.",
+        "samples": ["Which capability gaps remain?", "What does the audit chain prove?", "Can bitAgent execute a withdrawal or change a balance?"],
+    },
+}
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -163,6 +197,39 @@ async def index():
 @app.get("/exchange-api-test", include_in_schema=False)
 async def exchange_api_test_page():
     return FileResponse(ROOT / "static" / "exchange-api-test.html")
+
+
+@app.get("/agents", include_in_schema=False)
+async def agent_chat_hub():
+    return FileResponse(ROOT / "static" / "agent-chat.html")
+
+
+@app.get("/agents/{agent_domain}", include_in_schema=False)
+async def agent_chat_page(agent_domain: str):
+    if agent_domain not in AGENT_CHAT_DEFINITIONS:
+        raise HTTPException(status_code=404, detail="Unknown agent")
+    return FileResponse(ROOT / "static" / "agent-chat.html")
+
+
+@app.get("/knowledge", include_in_schema=False)
+async def knowledge_workspace():
+    return FileResponse(ROOT / "static" / "knowledge.html")
+
+
+@app.get("/api/v0/agents")
+async def agent_chat_catalog(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_features", role)
+    return {
+        "version": VERSION,
+        "agents": [
+            {"id": agent_id, **definition, "path": f"/agents/{agent_id}"}
+            for agent_id, definition in AGENT_CHAT_DEFINITIONS.items()
+        ],
+        "count": len(AGENT_CHAT_DEFINITIONS),
+        "action_executed": False,
+    }
 
 
 EXCHANGE_API_TESTS = [
@@ -358,17 +425,29 @@ async def exchange_user_investigation(
             ))
         else:
             root = f"/api/bot/user/{user_id}"
-            payloads = await asyncio.gather(
+            results = await asyncio.gather(
                 exchange_client.get(f"{root}/summary"),
                 exchange_client.get(f"{root}/balances"),
                 exchange_client.get(f"{root}/trades", {**period, "limit": limit}),
                 exchange_client.get(f"{root}/deposits", {**period, "limit": limit}),
                 exchange_client.get(f"{root}/withdrawals", {**period, "limit": limit}),
                 exchange_client.get(f"{root}/pnl", period),
+                return_exceptions=True,
+            )
+            names = ("summary", "balances", "trades", "deposits", "withdrawals", "pnl")
+            source_errors = {
+                name: str(result) for name, result in zip(names, results)
+                if isinstance(result, Exception)
+            }
+            payloads = tuple(
+                None if isinstance(result, Exception) else result for result in results
             )
         return {
             "version": VERSION, "exchange_api_version": EXCHANGE_API_VERSION,
-            **summarize_user_investigation(*payloads),
+            **summarize_user_investigation(
+                *payloads,
+                source_errors=source_errors if settings.bitagent_mode != "mock" else {},
+            ),
         }
     except (ExchangeAPIError, ExchangeContractError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -762,6 +841,17 @@ async def xima_knowledge_search(
             "items": retrieve_knowledge(settings.evidence_db_path, tenant_id, decision["role"], query, limit)}
 
 
+@app.post("/api/v0/xima/knowledge/qa")
+async def xima_knowledge_qa(
+    request: KnowledgeQuestionRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("view_xima", role)
+    return {"version": VERSION, "tenant_id": request.tenant_id,
+            "result": answer_knowledge_question(
+                settings.evidence_db_path, request, decision["role"])}
+
+
 @app.post("/api/v0/xima/agents/support/analyze")
 async def xima_support_analyze(
     request: SupportTicketRequest,
@@ -1115,6 +1205,10 @@ async def policy_evaluate(
 class ChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     session_id: UUID = Field(default_factory=uuid4)
+    agent: Literal[
+        "operations", "market-risk", "treasury", "aml-fraud",
+        "security", "support", "executive", "governance",
+    ] = "operations"
 
     @field_validator("question")
     @classmethod
@@ -1139,6 +1233,7 @@ async def readonly_chat(
             detail={"code": "chat_role_denied", "reason": decision["reason"]},
         )
     normalized_role = decision["role"]
+    agent_domain = request.agent
     session_id = str(request.session_id)
     allowed, retry_after = chat_rate_limiter.check(
         f"{normalized_role}:{session_id}", settings.chat_requests_per_minute
@@ -1182,9 +1277,11 @@ async def readonly_chat(
             success=True,
             error_code="prompt_injection_refused",
             session_id=session_id,
+            agent_domain=agent_domain,
         )
         return {
             "version": VERSION,
+            "agent": agent_domain,
             "session_id": session_id,
             "answer_type": "safety_refusal",
             "category": "safety",
@@ -1218,9 +1315,11 @@ async def readonly_chat(
             success=True,
             error_code="prohibited_action_refused",
             session_id=session_id,
+            agent_domain=agent_domain,
         )
         return {
             "version": VERSION,
+            "agent": agent_domain,
             "session_id": session_id,
             "answer_type": "policy_refusal",
             "category": "safety",
@@ -1252,9 +1351,11 @@ async def readonly_chat(
             evidence_record_id=evidence_record_id,
             success=True,
             session_id=session_id,
+            agent_domain=agent_domain,
         )
         return {
             "version": VERSION,
+            "agent": agent_domain,
             "session_id": session_id,
             "answer_type": "deterministic",
             "category": intent_category(deterministic["intent"]),
@@ -1276,6 +1377,7 @@ async def readonly_chat(
                 question,
                 context,
                 max_context_chars=settings.chat_context_max_chars,
+                agent_domain=agent_domain,
             )
         )
     except OllamaError as exc:
@@ -1289,6 +1391,7 @@ async def readonly_chat(
             success=False,
             error_code="ollama_unavailable",
             session_id=session_id,
+            agent_domain=agent_domain,
         )
         raise HTTPException(
             status_code=503,
@@ -1314,9 +1417,11 @@ async def readonly_chat(
         evidence_record_id=evidence_record_id,
         success=True,
         session_id=session_id,
+        agent_domain=agent_domain,
     )
     return {
         "version": VERSION,
+        "agent": agent_domain,
         "session_id": session_id,
         "answer_type": "llm",
         "category": "open_ended",

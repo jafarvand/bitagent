@@ -52,6 +52,12 @@ class SupportTicketRequest(BaseModel):
     account_state: Literal["normal", "restricted", "under_review", "unknown"]
 
 
+class KnowledgeQuestionRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=100)
+    question: str = Field(min_length=2, max_length=1000)
+    limit: int = Field(default=5, ge=1, le=20)
+
+
 def _connect(path: str) -> sqlite3.Connection:
     database = Path(path)
     database.parent.mkdir(parents=True, exist_ok=True)
@@ -148,6 +154,26 @@ def retrieve_knowledge(path: str, tenant_id: str, role: str, query: str, limit: 
             "excerpt": row["content"][:500],
         })
     return sorted(results, key=lambda item: item["score"], reverse=True)[:limit]
+
+
+def answer_knowledge_question(path: str, request: KnowledgeQuestionRequest, role: str) -> dict:
+    citations = retrieve_knowledge(path, request.tenant_id, role, request.question, request.limit)
+    if not citations:
+        return {
+            "status": "insufficient_evidence", "answer": None, "citations": [],
+            "confidence": "none",
+            "limitations": ["No effective, approved, role-accessible document matched the question."],
+            "human_review_required": True, "action_executed": False,
+        }
+    excerpts = "\n\n".join(
+        f"[{item['title']} v{item['version']}] {item['excerpt']}" for item in citations
+    )
+    return {
+        "status": "answered", "answer": excerpts, "citations": citations,
+        "confidence": "document_grounded",
+        "limitations": ["This is extractive guidance, not an exchange action or legal decision."],
+        "human_review_required": True, "action_executed": False,
+    }
 
 
 def _redact(value: str) -> str:
