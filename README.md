@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.11.0 — XIMA Secure Delivery and Resilient Gateway**
+Current release: **2.12.0 — XIMA Audited Output Channel**
 
 ## What version 0 shows
 
@@ -193,7 +193,8 @@ answers score zero and are never omitted from the overall result.
 | 2.8.0 | Shadow outcomes, reliability evidence, and readiness gates | Complete |
 | 2.9.0 | General maker-checker action sandbox and rollback | Complete |
 | 2.10.0 | Cross-domain executive priorities, coverage, KPI and evidence brief | Complete |
-| 2.11.0 | Bounded retry/circuit telemetry, secure CI, and platform operations baseline | Current |
+| 2.11.0 | Bounded retry/circuit telemetry, secure CI, and platform operations baseline | Complete |
+| 2.12.0 | Tenant-scoped append-only agent output feed and integrity verification | Current |
 
 ## Project documents
 

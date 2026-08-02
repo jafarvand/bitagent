@@ -73,6 +73,16 @@ def _connect(path: str) -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS xima_output_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, output_id TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL, tenant_id TEXT NOT NULL, output_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL, payload_json TEXT NOT NULL, payload_hash TEXT NOT NULL,
+            previous_hash TEXT NOT NULL, record_hash TEXT NOT NULL UNIQUE
+        )
+        """
+    )
     return connection
 
 
@@ -207,6 +217,61 @@ def verify_xima_chain(path: str) -> dict:
         ))
         expected = hashlib.sha256(material.encode()).hexdigest()
         if row["previous_hash"] != previous_hash or row["record_hash"] != expected:
+            return {"valid": False, "records": len(rows), "failed_id": row["id"]}
+        previous_hash = row["record_hash"]
+    return {"valid": True, "records": len(rows), "head_hash": previous_hash}
+
+
+def record_xima_output(
+    path: str, tenant_id: str, output_type: str, entity_id: str, payload: dict,
+) -> dict:
+    output_id = str(uuid4())
+    created_at = datetime.now(UTC).isoformat()
+    payload_json = _canonical(payload)
+    payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
+    with _connect(path) as connection:
+        previous = connection.execute(
+            "SELECT record_hash FROM xima_output_audit ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        previous_hash = previous["record_hash"] if previous else "0" * 64
+        material = "\n".join((previous_hash, output_id, created_at, tenant_id,
+                               output_type, entity_id, payload_hash))
+        record_hash = hashlib.sha256(material.encode()).hexdigest()
+        cursor = connection.execute(
+            "INSERT INTO xima_output_audit "
+            "(output_id,created_at,tenant_id,output_type,entity_id,payload_json,payload_hash,"
+            "previous_hash,record_hash) VALUES(?,?,?,?,?,?,?,?,?)",
+            (output_id, created_at, tenant_id, output_type, entity_id, payload_json,
+             payload_hash, previous_hash, record_hash),
+        )
+    return {
+        "id": cursor.lastrowid, "output_id": output_id, "created_at": created_at,
+        "payload_hash": payload_hash, "record_hash": record_hash,
+    }
+
+
+def recent_xima_outputs(path: str, tenant_id: str, limit: int) -> list[dict]:
+    with _connect(path) as connection:
+        rows = connection.execute(
+            "SELECT id,output_id,created_at,tenant_id,output_type,entity_id,payload_hash,"
+            "previous_hash,record_hash FROM xima_output_audit WHERE tenant_id=? "
+            "ORDER BY id DESC LIMIT ?", (tenant_id, limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def verify_xima_output_chain(path: str) -> dict:
+    with _connect(path) as connection:
+        rows = connection.execute("SELECT * FROM xima_output_audit ORDER BY id").fetchall()
+    previous_hash = "0" * 64
+    for row in rows:
+        payload_hash = hashlib.sha256(row["payload_json"].encode()).hexdigest()
+        material = "\n".join((previous_hash, row["output_id"], row["created_at"],
+                               row["tenant_id"], row["output_type"], row["entity_id"],
+                               payload_hash))
+        expected = hashlib.sha256(material.encode()).hexdigest()
+        if (row["payload_hash"] != payload_hash or row["previous_hash"] != previous_hash
+                or row["record_hash"] != expected):
             return {"valid": False, "records": len(rows), "failed_id": row["id"]}
         previous_hash = row["record_hash"]
     return {"valid": True, "records": len(rows), "head_hash": previous_hash}

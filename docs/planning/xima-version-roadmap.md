@@ -24,6 +24,7 @@ training, or steering approval as software features.
 | `2.9.0` | General action sandbox | Risk-classified previews, maker-checker separation, exact signed authorization, expiry, idempotency, timeout, result verification, rollback, and kill switch | Complete |
 | `2.10.0` | Executive intelligence | Cross-domain coverage, KPIs, prioritized risk/incident summary, evidence, owners, and next actions | Complete |
 | `2.11.0` | Secure delivery and gateway | Bounded retry/backoff, circuit breaker, source telemetry, CI security scans, environment, logging, retention, and release baseline | Complete |
+| `2.12.0` | Audited output channel | Tenant-scoped append-only agent/report feed, payload receipts, and independent integrity verification | Complete |
 
 ## Definition of software completion
 

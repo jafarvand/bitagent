@@ -82,7 +82,10 @@ from app.readiness import (
     security_self_test,
     uat_readiness,
 )
-from app.xima import EvidenceEnvelope, ingest_evidence, replay_evidence, source_health, verify_xima_chain
+from app.xima import (
+    EvidenceEnvelope, ingest_evidence, recent_xima_outputs, record_xima_output,
+    replay_evidence, source_health, verify_xima_chain, verify_xima_output_chain,
+)
 from app.xima_operations import OperationsAnalysisRequest, analyze_operations
 from app.xima_market import MarketRiskRequest as XimaMarketRiskRequest, analyze_market_risk as analyze_xima_market_risk
 from app.xima_treasury import TreasuryAnalysisRequest, analyze_treasury
@@ -103,7 +106,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.11.0"
+VERSION = "2.12.0"
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -153,7 +156,7 @@ async def status():
     return {
         "name": "bitAgent",
         "version": VERSION,
-        "release": "XIMA Secure Delivery and Resilient Gateway",
+        "release": "XIMA Audited Output Channel",
         "mode": settings.bitagent_mode,
         "read_only": True,
         "base_url_configured": bool(settings.exchange_api_base_url),
@@ -428,7 +431,12 @@ async def xima_operations_analyze(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "analysis": analyze_operations(request)}
+    analysis = analyze_operations(request)
+    analysis["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "operations_analysis",
+        analysis.get("incident_key", request.observed_at.isoformat()), analysis,
+    )
+    return {"version": VERSION, "analysis": analysis}
 
 
 @app.post("/api/v0/xima/agents/market-risk/analyze")
@@ -437,7 +445,12 @@ async def xima_market_risk_analyze(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "analysis": analyze_xima_market_risk(request)}
+    analysis = analyze_xima_market_risk(request)
+    analysis["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "market_risk_analysis",
+        request.market, analysis,
+    )
+    return {"version": VERSION, "analysis": analysis}
 
 
 @app.post("/api/v0/xima/agents/treasury/analyze")
@@ -446,7 +459,12 @@ async def xima_treasury_analyze(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "analysis": analyze_treasury(request)}
+    analysis = analyze_treasury(request)
+    analysis["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "treasury_analysis",
+        request.observed_at.isoformat(), analysis,
+    )
+    return {"version": VERSION, "analysis": analysis}
 
 
 @app.post("/api/v0/xima/agents/aml-fraud/analyze")
@@ -455,7 +473,12 @@ async def xima_aml_analyze(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "analysis": analyze_aml(request)}
+    analysis = analyze_aml(request)
+    analysis["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "aml_fraud_analysis",
+        request.observed_at.isoformat(), analysis,
+    )
+    return {"version": VERSION, "analysis": analysis}
 
 
 @app.post("/api/v0/xima/agents/aml-fraud/feedback", status_code=201)
@@ -475,7 +498,12 @@ async def xima_security_analyze(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "analysis": analyze_security(request)}
+    analysis = analyze_security(request)
+    analysis["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "security_analysis",
+        request.observed_at.isoformat(), analysis,
+    )
+    return {"version": VERSION, "analysis": analysis}
 
 
 @app.post("/api/v0/xima/knowledge/documents", status_code=201)
@@ -510,8 +538,12 @@ async def xima_support_analyze(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     decision = authorize("view_xima", role)
-    return {"version": VERSION,
-            "analysis": analyze_support(settings.evidence_db_path, request, decision["role"])}
+    analysis = analyze_support(settings.evidence_db_path, request, decision["role"])
+    analysis["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "support_analysis",
+        request.ticket_id, analysis,
+    )
+    return {"version": VERSION, "analysis": analysis}
 
 
 @app.post("/api/v0/xima/governance/policy/evaluate")
@@ -520,7 +552,12 @@ async def xima_policy_evaluate(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "result": evaluate_xima_policy(request)}
+    result = evaluate_xima_policy(request)
+    result["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "policy_decision",
+        request.action, result,
+    )
+    return {"version": VERSION, "result": result}
 
 
 @app.post("/api/v0/xima/governance/registry", status_code=201)
@@ -543,7 +580,12 @@ async def xima_evaluation(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "evaluation": evaluate_quality(request)}
+    evaluation = evaluate_quality(request)
+    evaluation["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "quality_evaluation",
+        request.component_name, evaluation,
+    )
+    return {"version": VERSION, "evaluation": evaluation}
 
 
 @app.post("/api/v0/xima/pilot/shadow/evaluate")
@@ -552,7 +594,12 @@ async def xima_shadow_evaluate(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "evaluation": evaluate_shadow_pilot(request)}
+    evaluation = evaluate_shadow_pilot(request)
+    evaluation["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "shadow_pilot_evaluation",
+        request.window_end.isoformat(), evaluation,
+    )
+    return {"version": VERSION, "evaluation": evaluation}
 
 
 def authorize_xima_actions(role: str | None) -> None:
@@ -621,7 +668,12 @@ async def xima_executive_brief(
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_xima", role)
-    return {"version": VERSION, "brief": build_executive_brief(request)}
+    brief = build_executive_brief(request)
+    brief["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "executive_brief",
+        request.reporting_period, brief,
+    )
+    return {"version": VERSION, "brief": brief}
 
 
 @app.get("/api/v0/xima/integrations/exchange/health")
@@ -631,6 +683,25 @@ async def xima_exchange_integration_health(
     authorize("view_xima", role)
     return {"version": VERSION, "source_id": "exchange-api",
             "health": exchange_client.health_snapshot()}
+
+
+@app.get("/api/v0/xima/outputs/recent")
+async def xima_outputs_recent(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    limit: int = Query(default=50, ge=1, le=500),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "tenant_id": tenant_id,
+            "items": recent_xima_outputs(settings.evidence_db_path, tenant_id, limit)}
+
+
+@app.get("/api/v0/xima/outputs/audit/verify")
+async def xima_outputs_verify(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    return {"version": VERSION, **verify_xima_output_chain(settings.evidence_db_path)}
 
 
 async def fetch_dashboard(market: str, days: int) -> tuple[dict, dict]:

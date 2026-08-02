@@ -42,7 +42,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.11.0"
+    assert response.json()["version"] == "2.12.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -72,7 +72,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.11.0"
+    assert body["version"] == "2.12.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -206,7 +206,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.11.0",
+        "version": "2.12.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -739,7 +739,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.11.0"
+    assert report["version"] == "2.12.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -834,7 +834,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.11.0"
+    assert manifest["current_version"] == "2.12.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1886,7 +1886,8 @@ def test_xima_support_agent_redacts_classifies_escalates_and_cites_safe_draft():
 
 def test_xima_cross_domain_policy_fails_closed_for_prohibited_cross_tenant_and_restricted_data():
     base = {
-        "role": "admin", "tenant_match": True, "domain": "treasury",
+        "tenant_id": "exchange-a", "role": "admin", "tenant_match": True,
+        "domain": "treasury",
         "data_class": "restricted", "environment": "production", "risk": "prohibited",
         "action": "transfer_funds", "evidence_fresh": True,
         "mfa_present": True, "approval_count": 2,
@@ -1950,7 +1951,8 @@ def test_xima_evaluation_gates_quality_safety_latency_cost_drift_and_fallback():
         "/api/v0/xima/governance/evaluations",
         headers={"X-BitAgent-Role": "auditor"},
         json={
-            "component_name": "treasury-agent", "component_version": "2.3.0",
+            "tenant_id": "exchange-a", "component_name": "treasury-agent",
+            "component_version": "2.3.0",
             "cases": [good_case],
             "adversarial_cases": [{
                 "case_id": "attack-1", "attack_type": "data_exfiltration",
@@ -1964,7 +1966,8 @@ def test_xima_evaluation_gates_quality_safety_latency_cost_drift_and_fallback():
         "/api/v0/xima/governance/evaluations",
         headers={"X-BitAgent-Role": "auditor"},
         json={
-            "component_name": "treasury-agent", "component_version": "2.3.1",
+            "tenant_id": "exchange-a", "component_name": "treasury-agent",
+            "component_version": "2.3.1",
             "cases": [{**good_case, "correct": False, "latency_ms": 1000}],
             "adversarial_cases": [{
                 "case_id": "attack-2", "attack_type": "cross_tenant",
@@ -2437,3 +2440,40 @@ def test_xima_domain_contracts_reject_timezone_naive_evidence_timestamps():
     )
 
     assert response.status_code == 422
+
+
+def test_xima_agent_outputs_are_tenant_scoped_hash_audited_and_metadata_only():
+    analysis = client.post(
+        "/api/v0/xima/agents/operations/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": datetime.now(UTC).isoformat(),
+            "evidence_refs": ["ops-evidence-1"], "owner": "operations",
+            "evidence_fresh": True, "conflicting_fields": [],
+            "services": [{
+                "name": "api", "error_rate_percent": 0, "p95_latency_ms": 10,
+                "capacity_used_percent": 10, "dependencies_healthy": True,
+            }],
+        },
+    ).json()["analysis"]
+    own_feed = client.get(
+        "/api/v0/xima/outputs/recent?tenant_id=exchange-a",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()["items"]
+    other_feed = client.get(
+        "/api/v0/xima/outputs/recent?tenant_id=exchange-b",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()["items"]
+    verification = client.get(
+        "/api/v0/xima/outputs/audit/verify",
+        headers={"X-BitAgent-Role": "auditor"},
+    ).json()
+
+    assert analysis["audit"]["output_id"]
+    assert analysis["audit"]["payload_hash"]
+    assert len(own_feed) == 1
+    assert own_feed[0]["output_type"] == "operations_analysis"
+    assert "payload_json" not in own_feed[0]
+    assert other_feed == []
+    assert verification["valid"] is True
+    assert verification["records"] == 1

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 
 class XimaPolicyRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=100)
     role: Literal["anonymous", "viewer", "operator", "auditor", "admin"]
     tenant_match: bool
     domain: Literal[
@@ -55,6 +56,7 @@ class AdversarialCase(BaseModel):
 
 
 class EvaluationRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=100)
     component_name: str = Field(min_length=2, max_length=100)
     component_version: str = Field(min_length=1, max_length=30)
     cases: list[EvaluationCase] = Field(min_length=1, max_length=10000)

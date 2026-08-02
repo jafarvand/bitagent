@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.12.0] - 2026-08-01
+
+- Added append-only payload-hashed audit records for domain, executive, policy, quality, and shadow outputs.
+- Added a tenant-scoped metadata-only alert/report output feed that does not disclose stored payload content.
+- Added independent output-chain integrity verification and exact timezone-aware XIMA contracts.
+
 ## [2.11.0] - 2026-08-01
 
 - Added bounded exchange read retries with exponential backoff, retry classification, and circuit breaking.
