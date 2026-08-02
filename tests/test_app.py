@@ -55,6 +55,11 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
+    assert '/static/app.js?v=2.12.0-market-quality' in response.text
+
+    script = client.get("/static/app.js").text
+    assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
+    assert ': "Data incomplete"' in script
 
 
 def test_status_reports_llm_configuration_without_credentials():

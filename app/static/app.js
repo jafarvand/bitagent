@@ -82,14 +82,20 @@ function renderReadiness(payload) {
 function renderDashboard(payload) {
   const op = payload.operations.data;
   const market = payload.market.data;
+  const risk = payload.market_risk;
+  const marketDataValid = risk.data_quality.valid;
   const values = [op.orders, op.deposits, op.withdrawals, op.pending_withdrawals];
   document.querySelectorAll("#metrics strong").forEach((node, i) => node.textContent = number(values[i], 0));
   $("market-name").textContent = `${market.base_asset} / ${market.quote_asset}`;
-  $("market-active").textContent = market.is_active ? "Active" : "Inactive";
-  $("market-active").className = `pill ${market.is_active ? "good" : "warn"}`;
-  $("last-price").textContent = number(market.last);
+  $("market-active").textContent = marketDataValid
+    ? (market.is_active ? "Active" : "Inactive")
+    : "Data incomplete";
+  $("market-active").className = `pill ${marketDataValid && market.is_active ? "good" : "warn"}`;
+  $("last-price").textContent = marketDataValid ? number(market.last) : "Unavailable";
   $("quote").textContent = market.quote_asset;
-  ["open", "high", "low", "volume"].forEach(key => $(key).textContent = number(market[key]));
+  ["open", "high", "low", "volume"].forEach(key => {
+    $(key).textContent = marketDataValid ? number(market[key]) : "Unavailable";
+  });
   const signal = payload.signals[0];
   $("pending-large").textContent = number(signal.value, 0);
   $("signal-text").textContent = signal.explanation;
@@ -110,7 +116,6 @@ function renderDashboard(payload) {
     `<li><time>${new Date(item.at).toLocaleTimeString()}</time><span>${item.event}</span></li>`
   ).join("");
   $("incident-guidance").textContent = incident.recommended_investigation;
-  const risk = payload.market_risk;
   $("risk-market").textContent = `${risk.market} evidence window`;
   $("risk-severity").textContent = risk.severity;
   $("risk-severity").className = `pill ${risk.severity === "healthy" ? "good" : "warn"}`;
