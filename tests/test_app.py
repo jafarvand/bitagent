@@ -1,8 +1,11 @@
 import asyncio
+import base64
 import hashlib
 import hmac
+import io
 import json
 import re
+import zipfile
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,6 +28,7 @@ from app.ollama import OllamaClient
 from app.release_inputs import validate_release_inputs
 from scripts.evaluate_chat import question_set, score
 from app.release_candidate import build_release_candidate_manifest
+from app.xima_support import extract_document_text
 
 
 client = TestClient(app)
@@ -46,7 +50,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.13.1"
+    assert response.json()["version"] == "2.14.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -59,7 +63,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.13.1' in response.text
+    assert '/static/app.js?v=2.14.0' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -97,7 +101,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=2.13.1-agents' in html
+    assert 'agent-chat.js?v=2.14.0-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -111,7 +115,7 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=2.13.1-knowledge' in html
+    assert 'knowledge.js?v=2.14.0-knowledge' in html
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -149,6 +153,91 @@ def test_knowledge_wizard_process_and_grounded_qa_flow():
     assert answered.json()["result"]["action_executed"] is False
     assert missing.json()["result"]["status"] == "insufficient_evidence"
     assert missing.json()["result"]["answer"] is None
+
+
+def test_knowledge_upload_inventory_duplicate_evaluation_and_supersession():
+    metadata = {
+        "tenant_id": "managed-exchange", "document_id": "network-rule",
+        "title": "Network maintenance rule", "document_type": "runbook",
+        "version": "1.0.0", "owner": "operations", "approval_status": "approved",
+        "approved_by_role": "operations", "effective_at": "2025-01-01T00:00:00Z",
+        "expires_at": "2099-01-01T00:00:00Z", "data_class": "internal",
+        "allowed_roles": ["operator", "admin"],
+        "keywords": ["network", "maintenance", "withdrawal"],
+        "source_ref": "runbook:network-maintenance",
+    }
+    encoded = base64.b64encode(
+        b"During network maintenance, withdrawals must remain paused until node synchronization completes."
+    ).decode()
+    uploaded = client.post(
+        "/api/v0/xima/knowledge/documents/upload",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"document": metadata, "filename": "network-rule.md", "content_base64": encoded},
+    )
+    duplicate = client.post(
+        "/api/v0/xima/knowledge/documents/upload",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"document": {**metadata, "document_id": "duplicate-rule"},
+              "filename": "duplicate.txt", "content_base64": encoded},
+    )
+    inventory = client.get(
+        "/api/v0/xima/knowledge/documents?tenant_id=managed-exchange",
+        headers={"X-BitAgent-Role": "admin"},
+    ).json()
+    evaluation = client.post(
+        "/api/v0/xima/knowledge/evaluations",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "managed-exchange", "cases": [{
+            "question": "What happens to withdrawals during network maintenance?",
+            "expected_document_ids": ["network-rule"],
+        }]},
+    ).json()["evaluation"]
+    transition = client.post(
+        "/api/v0/xima/knowledge/documents/network-rule/versions/1.0.0/status",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"tenant_id": "managed-exchange", "status": "superseded",
+              "changed_by_role": "admin", "reason": "Replaced by the next reviewed policy"},
+    )
+    after = client.post(
+        "/api/v0/xima/knowledge/qa",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "managed-exchange",
+              "question": "What happens during network maintenance?"},
+    ).json()["result"]
+
+    assert uploaded.status_code == 201
+    assert uploaded.json()["processing"]["processor"] == "utf8"
+    assert uploaded.json()["processing"]["chunks"][0]["content_hash"]
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["code"] == "knowledge_duplicate_content"
+    assert inventory["count"] == 1
+    assert inventory["items"][0]["lifecycle"] == "effective"
+    assert evaluation["status"] == "passed"
+    assert evaluation["hit_rate"] == 1.0
+    assert evaluation["mean_reciprocal_rank"] == 1.0
+    assert transition.status_code == 200
+    assert transition.json()["transition"]["record_hash"]
+    assert after["status"] == "insufficient_evidence"
+
+
+def test_docx_processing_extracts_text_and_rejects_unsupported_files():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            '<?xml version="1.0"?><w:document xmlns:w="urn:test"><w:body>'
+            '<w:p><w:r><w:t>Approved exchange withdrawal policy requires human review.</w:t>'
+            "</w:r></w:p></w:body></w:document>",
+        )
+    text, processing = extract_document_text(
+        "policy.docx", base64.b64encode(buffer.getvalue()).decode()
+    )
+
+    assert text == "Approved exchange withdrawal policy requires human review."
+    assert processing["processor"] == "docx-openxml"
+    assert processing["chunks"][0]["preview"] == text
+    with pytest.raises(ValueError, match="supported document types"):
+        extract_document_text("policy.exe", base64.b64encode(b"not a supported document body").decode())
 
 
 @pytest.mark.parametrize(
@@ -192,7 +281,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.13.1' in page.text
+    assert 'exchange-api-test.js?v=2.14.0' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -414,7 +503,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.13.1"
+    assert body["version"] == "2.14.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -548,7 +637,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.13.1",
+        "version": "2.14.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1081,7 +1170,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.13.1"
+    assert report["version"] == "2.14.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1176,7 +1265,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.13.1"
+    assert manifest["current_version"] == "2.14.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

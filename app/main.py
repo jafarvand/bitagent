@@ -97,8 +97,11 @@ from app.xima_treasury import TreasuryAnalysisRequest, analyze_treasury
 from app.xima_aml import AMLAnalysisRequest, AMLFeedbackRequest, analyze_aml, record_aml_feedback
 from app.xima_security import SecurityAnalysisRequest, analyze_security
 from app.xima_support import (
-    KnowledgeDocumentRequest, KnowledgeQuestionRequest, SupportTicketRequest,
-    analyze_support, answer_knowledge_question, ingest_knowledge, retrieve_knowledge,
+    KnowledgeDocumentRequest, KnowledgeEvaluationRequest, KnowledgeQuestionRequest,
+    KnowledgeStatusRequest, KnowledgeUploadRequest, SupportTicketRequest,
+    analyze_support, answer_knowledge_question, change_knowledge_status,
+    evaluate_knowledge, extract_document_text, ingest_knowledge, list_knowledge,
+    retrieve_knowledge,
 )
 from app.xima_governance import (
     EvaluationRequest as XimaEvaluationRequest, RegistryEntryRequest,
@@ -111,7 +114,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.13.1"
+VERSION = "2.14.0"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -829,6 +832,53 @@ async def xima_knowledge_ingest(
     return {"version": VERSION, "document": result}
 
 
+@app.post("/api/v0/xima/knowledge/documents/upload", status_code=201)
+async def xima_knowledge_upload(
+    request: KnowledgeUploadRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_xima_knowledge", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "knowledge_role_denied"})
+    try:
+        content, processing = extract_document_text(request.filename, request.content_base64)
+        document = KnowledgeDocumentRequest(**request.document.model_dump(), content=content)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "document_processing_failed",
+                                                     "message": str(exc)}) from exc
+    status_code, result = ingest_knowledge(settings.evidence_db_path, document)
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "document": result, "processing": processing}
+
+
+@app.get("/api/v0/xima/knowledge/documents")
+async def xima_knowledge_inventory(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("view_xima", role)
+    items = list_knowledge(settings.evidence_db_path, tenant_id, decision["role"])
+    return {"version": VERSION, "tenant_id": tenant_id, "items": items,
+            "count": len(items), "action_executed": False}
+
+
+@app.post("/api/v0/xima/knowledge/documents/{document_id}/versions/{document_version}/status")
+async def xima_knowledge_status(
+    document_id: str, document_version: str, request: KnowledgeStatusRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_xima_knowledge", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "knowledge_role_denied"})
+    status_code, result = change_knowledge_status(
+        settings.evidence_db_path, document_id, document_version, request
+    )
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "transition": result}
+
+
 @app.get("/api/v0/xima/knowledge/search")
 async def xima_knowledge_search(
     tenant_id: str = Query(min_length=1, max_length=100),
@@ -850,6 +900,20 @@ async def xima_knowledge_qa(
     return {"version": VERSION, "tenant_id": request.tenant_id,
             "result": answer_knowledge_question(
                 settings.evidence_db_path, request, decision["role"])}
+
+
+@app.post("/api/v0/xima/knowledge/evaluations")
+async def xima_knowledge_evaluation(
+    request: KnowledgeEvaluationRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("view_xima", role)
+    result = evaluate_knowledge(settings.evidence_db_path, request, decision["role"])
+    result["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "knowledge_evaluation",
+        datetime.now(UTC).isoformat(), result,
+    )
+    return {"version": VERSION, "tenant_id": request.tenant_id, "evaluation": result}
 
 
 @app.post("/api/v0/xima/agents/support/analyze")

@@ -249,7 +249,7 @@ FEATURES = [
         "name": "XIMA governed knowledge",
         "status": "available",
         "source": "/api/v0/xima/knowledge/*",
-        "description": "Approved, versioned, expiring, role- and tenant-scoped cited retrieval.",
+        "description": "Multi-format extraction, chunk hashes, duplicate controls, inventory, append-only lifecycle events, cited retrieval and evaluation.",
     },
     {
         "id": "xima-governance-evaluation",

@@ -1,7 +1,11 @@
 import hashlib
+import base64
+import io
 import json
 import re
 import sqlite3
+import zipfile
+from xml.etree import ElementTree
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -10,7 +14,7 @@ from uuid import uuid4
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 
-class KnowledgeDocumentRequest(BaseModel):
+class KnowledgeDocumentMetadata(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
     document_id: str = Field(min_length=3, max_length=100)
     title: str = Field(min_length=3, max_length=200)
@@ -26,7 +30,6 @@ class KnowledgeDocumentRequest(BaseModel):
         min_length=1, max_length=4
     )
     keywords: list[str] = Field(min_length=1, max_length=100)
-    content: str = Field(min_length=20, max_length=100000)
     source_ref: str = Field(min_length=3, max_length=500)
 
     @model_validator(mode="after")
@@ -36,6 +39,34 @@ class KnowledgeDocumentRequest(BaseModel):
         if self.approval_status == "approved" and not self.approved_by_role:
             raise ValueError("approved documents require approved_by_role")
         return self
+
+
+class KnowledgeDocumentRequest(KnowledgeDocumentMetadata):
+    content: str = Field(min_length=20, max_length=100000)
+
+
+class KnowledgeUploadRequest(BaseModel):
+    document: KnowledgeDocumentMetadata
+    filename: str = Field(min_length=3, max_length=255)
+    content_base64: str = Field(min_length=4, max_length=14_000_000)
+
+
+class KnowledgeStatusRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=100)
+    status: Literal["draft", "approved", "rejected", "superseded"]
+    changed_by_role: str = Field(min_length=2, max_length=100)
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class KnowledgeEvaluationCase(BaseModel):
+    question: str = Field(min_length=2, max_length=1000)
+    expected_document_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+class KnowledgeEvaluationRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=100)
+    cases: list[KnowledgeEvaluationCase] = Field(min_length=1, max_length=100)
+    limit: int = Field(default=5, ge=1, le=20)
 
 
 class SupportTicketRequest(BaseModel):
@@ -78,6 +109,16 @@ def _connect(path: str) -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS xima_knowledge_status_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL, tenant_id TEXT NOT NULL, document_id TEXT NOT NULL,
+            version TEXT NOT NULL, status TEXT NOT NULL, changed_by_role TEXT NOT NULL,
+            reason TEXT NOT NULL, previous_hash TEXT NOT NULL, record_hash TEXT NOT NULL UNIQUE
+        )
+        """
+    )
     return connection
 
 
@@ -86,6 +127,14 @@ def ingest_knowledge(path: str, request: KnowledgeDocumentRequest) -> tuple[int,
     created_at = datetime.now(UTC).isoformat()
     content_hash = hashlib.sha256(request.content.encode()).hexdigest()
     with _connect(path) as connection:
+        duplicate = connection.execute(
+            "SELECT document_id,version FROM xima_knowledge WHERE tenant_id=? AND content_hash=? "
+            "AND approval_status='approved'",
+            (request.tenant_id, content_hash),
+        ).fetchone()
+        if duplicate and request.approval_status == "approved":
+            return 409, {"code": "knowledge_duplicate_content",
+                         "document_id": duplicate["document_id"], "version": duplicate["version"]}
         previous = connection.execute(
             "SELECT record_hash FROM xima_knowledge ORDER BY id DESC LIMIT 1"
         ).fetchone()
@@ -115,8 +164,137 @@ def ingest_knowledge(path: str, request: KnowledgeDocumentRequest) -> tuple[int,
         "document_id": request.document_id, "version": request.version,
         "approval_status": request.approval_status, "content_hash": content_hash,
         "record_hash": record_hash, "created_at": created_at,
+        "chunk_count": len(chunk_knowledge(request.content)),
         "exchange_write_performed": False,
     }
+
+
+def chunk_knowledge(content: str, size: int = 1200, overlap: int = 150) -> list[dict]:
+    normalized = " ".join(content.split())
+    chunks = []
+    start = 0
+    while start < len(normalized):
+        end = min(len(normalized), start + size)
+        if end < len(normalized):
+            boundary = normalized.rfind(" ", start, end)
+            if boundary > start:
+                end = boundary
+        text = normalized[start:end].strip()
+        if text:
+            chunks.append({"index": len(chunks), "start": start, "end": end,
+                           "content_hash": hashlib.sha256(text.encode()).hexdigest(),
+                           "preview": text[:240]})
+        if end >= len(normalized):
+            break
+        start = max(end - overlap, start + 1)
+    return chunks
+
+
+def extract_document_text(filename: str, encoded: str) -> tuple[str, dict]:
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except ValueError as exc:
+        raise ValueError("content_base64 is invalid") from exc
+    if not raw or len(raw) > 10_000_000:
+        raise ValueError("document must be between 1 byte and 10 MB")
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".txt", ".md", ".csv", ".json"}:
+        text = raw.decode("utf-8")
+        processor = "utf8"
+    elif suffix == ".docx":
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                xml = archive.read("word/document.xml")
+            root = ElementTree.fromstring(xml)
+            text = " ".join(node.text or "" for node in root.iter()
+                            if node.tag.endswith("}t"))
+        except (zipfile.BadZipFile, KeyError, ElementTree.ParseError) as exc:
+            raise ValueError("DOCX document is invalid") from exc
+        processor = "docx-openxml"
+    elif suffix == ".pdf":
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(raw))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception as exc:
+            raise ValueError("PDF text extraction failed") from exc
+        processor = "pypdf"
+    else:
+        raise ValueError("supported document types are TXT, Markdown, CSV, JSON, DOCX, and PDF")
+    normalized = " ".join(text.split())
+    if len(normalized) < 20:
+        raise ValueError("document contains less than 20 characters of extractable text")
+    if len(normalized) > 100000:
+        raise ValueError("extracted document exceeds 100000 characters")
+    return normalized, {"filename": filename, "bytes": len(raw), "processor": processor,
+                        "chunks": chunk_knowledge(normalized)}
+
+
+def list_knowledge(path: str, tenant_id: str, role: str, include_content: bool = False) -> list[dict]:
+    now = datetime.now(UTC)
+    with _connect(path) as connection:
+        rows = connection.execute(
+            "SELECT * FROM xima_knowledge WHERE tenant_id=? ORDER BY document_id,id DESC",
+            (tenant_id,),
+        ).fetchall()
+        events = connection.execute(
+            "SELECT * FROM xima_knowledge_status_events WHERE tenant_id=? ORDER BY id DESC",
+            (tenant_id,),
+        ).fetchall()
+    latest_status = {}
+    for event in events:
+        latest_status.setdefault((event["document_id"], event["version"]), event["status"])
+    items = []
+    for row in rows:
+        allowed_roles = json.loads(row["allowed_roles_json"])
+        if role not in allowed_roles and role != "admin":
+            continue
+        expires = datetime.fromisoformat(row["expires_at"])
+        effective = datetime.fromisoformat(row["effective_at"])
+        status = latest_status.get((row["document_id"], row["version"]), row["approval_status"])
+        item = {key: row[key] for key in (
+            "receipt_id", "created_at", "tenant_id", "document_id", "title",
+            "document_type", "version", "owner", "data_class", "source_ref", "content_hash")}
+        item.update({"status": status, "effective_at": row["effective_at"],
+                     "expires_at": row["expires_at"], "allowed_roles": allowed_roles,
+                     "keywords": json.loads(row["keywords_json"]),
+                     "lifecycle": "expired" if expires <= now else
+                                  "scheduled" if effective > now else "effective",
+                     "chunks": chunk_knowledge(row["content"])})
+        if include_content:
+            item["content"] = row["content"]
+        items.append(item)
+    return items
+
+
+def change_knowledge_status(path: str, document_id: str, version: str,
+                            request: KnowledgeStatusRequest) -> tuple[int, dict]:
+    created_at, event_id = datetime.now(UTC).isoformat(), str(uuid4())
+    with _connect(path) as connection:
+        document = connection.execute(
+            "SELECT 1 FROM xima_knowledge WHERE tenant_id=? AND document_id=? AND version=?",
+            (request.tenant_id, document_id, version),
+        ).fetchone()
+        if not document:
+            return 404, {"code": "knowledge_document_not_found"}
+        previous = connection.execute(
+            "SELECT record_hash FROM xima_knowledge_status_events ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        previous_hash = previous["record_hash"] if previous else "0" * 64
+        material = f"{request.tenant_id}\n{document_id}\n{version}\n{request.status}\n{request.changed_by_role}\n{request.reason}"
+        record_hash = hashlib.sha256(
+            f"{previous_hash}\n{created_at}\n{event_id}\n{material}".encode()
+        ).hexdigest()
+        connection.execute(
+            "INSERT INTO xima_knowledge_status_events "
+            "(event_id,created_at,tenant_id,document_id,version,status,changed_by_role,reason,previous_hash,record_hash) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (event_id, created_at, request.tenant_id, document_id, version, request.status,
+             request.changed_by_role, request.reason, previous_hash, record_hash),
+        )
+    return 200, {"event_id": event_id, "document_id": document_id, "version": version,
+                 "status": request.status, "record_hash": record_hash, "created_at": created_at,
+                 "exchange_write_performed": False}
 
 
 def _terms(value: str) -> set[str]:
@@ -124,34 +302,25 @@ def _terms(value: str) -> set[str]:
 
 
 def retrieve_knowledge(path: str, tenant_id: str, role: str, query: str, limit: int = 5) -> list[dict]:
-    now = datetime.now(UTC)
-    with _connect(path) as connection:
-        rows = connection.execute(
-            "SELECT * FROM xima_knowledge WHERE tenant_id=? AND approval_status='approved' "
-            "ORDER BY id DESC", (tenant_id,),
-        ).fetchall()
     query_terms = _terms(query)
     results = []
     seen_documents = set()
-    for row in rows:
-        if row["document_id"] in seen_documents:
+    for item in list_knowledge(path, tenant_id, role, include_content=True):
+        if item["document_id"] in seen_documents:
             continue
-        effective = datetime.fromisoformat(row["effective_at"])
-        expires = datetime.fromisoformat(row["expires_at"])
-        allowed_roles = json.loads(row["allowed_roles_json"])
-        if not (effective <= now < expires) or role not in allowed_roles:
+        if item["status"] != "approved" or item["lifecycle"] != "effective":
             continue
-        searchable = _terms(f"{row['title']} {' '.join(json.loads(row['keywords_json']))} {row['content']}")
+        searchable = _terms(f"{item['title']} {' '.join(item['keywords'])} {item['content']}")
         score = len(query_terms & searchable)
         if not score:
             continue
-        seen_documents.add(row["document_id"])
+        seen_documents.add(item["document_id"])
         results.append({
-            "document_id": row["document_id"], "title": row["title"],
-            "version": row["version"], "owner": row["owner"],
-            "source_ref": row["source_ref"], "content_hash": row["content_hash"],
-            "expires_at": row["expires_at"], "score": score,
-            "excerpt": row["content"][:500],
+            "document_id": item["document_id"], "title": item["title"],
+            "version": item["version"], "owner": item["owner"],
+            "source_ref": item["source_ref"], "content_hash": item["content_hash"],
+            "expires_at": item["expires_at"], "score": score,
+            "excerpt": item["content"][:500],
         })
     return sorted(results, key=lambda item: item["score"], reverse=True)[:limit]
 
@@ -174,6 +343,32 @@ def answer_knowledge_question(path: str, request: KnowledgeQuestionRequest, role
         "limitations": ["This is extractive guidance, not an exchange action or legal decision."],
         "human_review_required": True, "action_executed": False,
     }
+
+
+def evaluate_knowledge(path: str, request: KnowledgeEvaluationRequest, role: str) -> dict:
+    results = []
+    hits = 0
+    reciprocal_rank_total = 0.0
+    for case in request.cases:
+        citations = retrieve_knowledge(
+            path, request.tenant_id, role, case.question, request.limit
+        )
+        returned = [item["document_id"] for item in citations]
+        ranks = [returned.index(expected) + 1 for expected in case.expected_document_ids
+                 if expected in returned]
+        hit = bool(ranks)
+        hits += int(hit)
+        reciprocal_rank_total += 1 / min(ranks) if ranks else 0
+        results.append({"question": case.question,
+                        "expected_document_ids": case.expected_document_ids,
+                        "returned_document_ids": returned, "hit": hit,
+                        "reciprocal_rank": 1 / min(ranks) if ranks else 0})
+    count = len(results)
+    return {"status": "passed" if hits == count else "needs_improvement",
+            "case_count": count, "hit_count": hits,
+            "hit_rate": round(hits / count, 4),
+            "mean_reciprocal_rank": round(reciprocal_rank_total / count, 4),
+            "results": results, "action_executed": False}
 
 
 def _redact(value: str) -> str:

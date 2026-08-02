@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.14.0] - 2026-08-02
+
+- Added server-side TXT, Markdown, CSV, JSON, DOCX, and text-based PDF extraction with size and content validation.
+- Added chunk previews and hashes, tenant-scoped duplicate detection, governed inventory, version lifecycle visibility, and append-only status transitions.
+- Added citation retrieval evaluations with hit rate and mean reciprocal rank, plus a complete management workspace for import, processing, inventory, supersession, Q&A, and evaluation.
+
 ## [2.13.1] - 2026-08-02
 
 - Added eight separate domain-bound agent chat pages with sample questions and agent identity retained in every chat audit record.

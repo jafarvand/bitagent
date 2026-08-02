@@ -1,7 +1,7 @@
 # XIMA Completion Matrix
 
 Assessment date: 2026-08-02
-Software release: `2.13.1`
+Software release: `2.14.0`
 Authority: `docs/planning/project-plan.md`
 
 This matrix separates repository-complete capabilities from exchange-side and
@@ -42,7 +42,7 @@ owner exercise, or steering approval exists.
 ## Current production decision
 
 The repository is software-complete for the versioned XIMA plan through
-`2.13.1`, but it is **not approved for a production-controlled-action launch**.
+`2.14.0`, but it is **not approved for a production-controlled-action launch**.
 The next concrete exchange dependency is restoring the staging matching-engine
 balance, trade-history, and market services, followed by the remaining E1–E8
 delivery and evidence package described in
