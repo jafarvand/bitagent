@@ -5,16 +5,19 @@ import json
 import re
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 import httpx
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from app import mock_data
 from app.config import settings
 from app.chat import build_prompt
 from app.chat import chat_rate_limiter
 from app.exchange import ExchangeClient, exchange_client
+from app.exchange_v08 import ExchangeContractError, validate_envelope
 from app.evidence import backup_and_verify, record_dashboard
 from app.main import app
 from app.market_risk import analyze_market_range
@@ -43,7 +46,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.12.0"
+    assert response.json()["version"] == "2.13.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -56,7 +59,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.12.0-market-quality' in response.text
+    assert '/static/app.js?v=2.13.0' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -84,7 +87,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.12.0-exchange-0.8' in page.text
+    assert 'exchange-api-test.js?v=2.13.0' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -93,6 +96,61 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
         "health", "operations", "market-summary", "liabilities",
         "treasury-assets", "user-summary", "user-balances", "user-pnl",
     }
+
+
+def test_exchange_test_catalog_exactly_matches_copied_openapi_paths():
+    openapi = Path("docs/openapi.yaml").read_text()
+    documented = set(re.findall(r"^  (/api/bot/[^:]+):$", openapi, re.MULTILINE))
+    catalog = client.get(
+        "/api/v0/exchange-tests", headers={"X-BitAgent-Role": "operator"}
+    ).json()["tests"]
+    implemented = {
+        item["path"].replace("{market}", "{marketIdentifier}").replace("{user_id}", "{userId}")
+        for item in catalog
+    }
+
+    assert implemented == documented
+
+
+@pytest.mark.parametrize(
+    ("test_id", "expected_path", "expected_query_keys"),
+    [
+        ("health", "/api/bot/health", set()),
+        ("transactions", "/api/bot/transactions/summary", set()),
+        ("withdrawals", "/api/bot/withdrawals/pending", {"limit"}),
+        ("deposits", "/api/bot/deposits/pending", {"limit"}),
+        ("operations", "/api/bot/operations", {"date_from", "date_to"}),
+        ("market-summary", "/api/bot/market/USDT_IRT/summary", set()),
+        ("liabilities", "/api/bot/ledger/liabilities", set()),
+        ("treasury-assets", "/api/bot/treasury/assets", set()),
+        ("user-summary", "/api/bot/user/42/summary", set()),
+        ("user-balances", "/api/bot/user/42/balances", set()),
+        ("user-trades", "/api/bot/user/42/trades", {"date_from", "date_to", "limit"}),
+        ("user-deposits", "/api/bot/user/42/deposits", {"date_from", "date_to", "limit"}),
+        ("user-withdrawals", "/api/bot/user/42/withdrawals", {"date_from", "date_to", "limit"}),
+        ("user-pnl", "/api/bot/user/42/pnl", {"date_from", "date_to"}),
+    ],
+)
+def test_every_exchange_v08_route_is_signed_with_exact_path_and_query(
+    monkeypatch, test_id, expected_path, expected_query_keys,
+):
+    observed = {}
+
+    async def fake_get(path, params=None):
+        observed.update(path=path, params=params or {})
+        return mock_data.health()
+
+    monkeypatch.setattr(exchange_client, "get", fake_get)
+    response = client.post(
+        "/api/v0/exchange-tests/run",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"test_id": test_id, "market": "USDT_IRT", "user_id": 42, "limit": 5},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert observed["path"] == expected_path
+    assert set(observed["params"]) == expected_query_keys
 
 
 def test_exchange_api_test_runs_only_allowlisted_signed_get(monkeypatch):
@@ -129,6 +187,78 @@ def test_exchange_api_test_runs_only_allowlisted_signed_get(monkeypatch):
     assert unknown.status_code == 404
 
 
+def test_exchange_v08_envelope_validation_fails_closed():
+    with pytest.raises(ExchangeContractError, match="missing envelope fields"):
+        validate_envelope({"schema": {"name": "health", "version": "1.0.0"}}, "health")
+
+    payload = mock_data.health()
+    with pytest.raises(ExchangeContractError, match="expected schema operations"):
+        validate_envelope(payload, "operations")
+
+
+def test_exchange_version_coverage_accounts_for_every_pilot_version():
+    body = client.get(
+        "/api/v0/exchange/version-coverage",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+
+    assert [item["version"] for item in body["coverage"]] == [
+        "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8",
+    ]
+    statuses = {item["version"]: item["status"] for item in body["coverage"]}
+    assert statuses["0.1"] == "rejected"
+    assert statuses["0.6"] == "external"
+    assert body["implemented_versions"] == ["0.2", "0.3", "0.4", "0.5", "0.7", "0.8"]
+    assert body["action_executed"] is False
+
+
+def test_transaction_intelligence_consumes_v05_pending_endpoints():
+    body = client.get(
+        "/api/v0/exchange/transaction-intelligence?limit=10",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+
+    assert body["exchange_api_version"] == "0.8.0-pilot"
+    assert body["exchange_status"] == "healthy"
+    assert body["open_counts"] == {"withdrawals": 4, "deposits": 3}
+    assert body["sample"]["withdrawals_by_network"] == {"TRC20": 1}
+    assert body["sample"]["deposits_by_network"] == {"Shetab": 1}
+    assert body["data_quality"]["stale_legacy_rows_possible"] is True
+    assert body["action_executed"] is False
+
+
+def test_treasury_intelligence_reconciles_v07_liabilities_and_v08_assets():
+    body = client.get(
+        "/api/v0/exchange/treasury-intelligence",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+
+    assert body["status"] == "ready"
+    assert body["severity"] == "healthy"
+    assert body["deficit_assets"] == []
+    positions = {item["asset"]: item for item in body["positions"]}
+    assert positions["BTC"]["difference"] == "0.1"
+    assert positions["IRT"]["difference"] == "100"
+    assert body["quality"]["manual_wallet_refresh_required"] is True
+    assert body["action_executed"] is False
+
+
+def test_user_investigation_consumes_all_six_routes_without_raw_records():
+    body = client.get(
+        "/api/v0/exchange/users/42/investigation?days=7&limit=5",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+
+    assert body["user_id"] == 42
+    assert body["activity_counts"] == {"trades": 1, "deposits": 1, "withdrawals": 1}
+    assert body["portfolio"]["asset_count"] == 1
+    assert body["pnl"]["calculation_complete"] is False
+    assert body["pnl"]["incomplete_reason"] == "weighted_average_ledger_not_connected"
+    assert body["sensitive_records_exposed"] is False
+    assert "items" not in body
+    assert body["action_executed"] is False
+
+
 def test_status_reports_llm_configuration_without_credentials():
     body = client.get("/api/v0/status").json()
 
@@ -145,7 +275,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.12.0"
+    assert body["version"] == "2.13.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -279,7 +409,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.12.0",
+        "version": "2.13.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -445,8 +575,8 @@ def test_capability_gap_question_uses_feature_registry():
     body = response.json()
     assert body["intent"] == "feature_gaps"
     assert body["category"] == "capability"
-    assert "Treasury balances" in body["answer"]
-    assert "Reconciliation" in body["answer"]
+    assert "Queues and workers" in body["answer"]
+    assert "Treasury balances" not in body["answer"]
 
 
 def test_readiness_question_fails_closed_from_current_evidence():
@@ -812,7 +942,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.12.0"
+    assert report["version"] == "2.13.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -907,7 +1037,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.12.0"
+    assert manifest["current_version"] == "2.13.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]

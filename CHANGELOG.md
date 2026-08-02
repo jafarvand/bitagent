@@ -2,6 +2,14 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.13.0] - 2026-08-02
+
+- Rebuilt the signed connector and direct API console against exchange OpenAPI `0.8.0-pilot` and its 14 implemented read endpoints.
+- Added fail-closed v0.4 envelope validation plus v0.5 transaction/pending-flow intelligence with cursor and stale-row evidence boundaries.
+- Added v0.7 liabilities versus v0.8 treasury reconciliation with partial-source, manual-refresh, and non-proof-of-reserves safeguards.
+- Added minimized six-endpoint user investigations that suppress transaction rows and preserve the exchange's incomplete-PnL warning.
+- Added scoped service-key parsing, structured exchange errors, non-retryable circuit behavior, and sensitive diagnostic response suppression.
+
 ## [2.12.0] - 2026-08-01
 
 - Added append-only payload-hashed audit records for domain, executive, policy, quality, and shadow outputs.

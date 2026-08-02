@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
@@ -26,6 +27,10 @@ from app.chat import (
     redact,
 )
 from app.exchange import ExchangeAPIError, exchange_client
+from app.exchange_v08 import (
+    ExchangeContractError, analyze_transaction_flow, reconcile_treasury,
+    summarize_user_investigation,
+)
 from app.evidence import (
     evidence_trends,
     feedback_summary,
@@ -106,8 +111,18 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.12.0"
+VERSION = "2.13.0"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
+EXCHANGE_VERSION_COVERAGE = [
+    {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
+    {"version": "0.2", "status": "implemented", "capability": "Key-ID HMAC, signed query/body, nonce replay protection", "evidence": "app/exchange.py + signature tests"},
+    {"version": "0.3", "status": "implemented", "capability": "Pending withdrawals and six user investigation reads", "evidence": "/api/v0/exchange/users/{user_id}/investigation"},
+    {"version": "0.4", "status": "implemented", "capability": "Full envelope, scopes, quality, lineage, structured errors", "evidence": "app/exchange_v08.py fail-closed validation"},
+    {"version": "0.5", "status": "implemented", "capability": "Cursor-paginated pending deposits", "evidence": "/api/v0/exchange/transaction-intelligence"},
+    {"version": "0.6", "status": "external", "capability": "Isolated synthetic staging environment", "evidence": "https://staging-devapi.zekabot.com; exchange-owned credentials required"},
+    {"version": "0.7", "status": "implemented", "capability": "Aggregate ledger liabilities", "evidence": "/api/v0/exchange/treasury-intelligence"},
+    {"version": "0.8", "status": "implemented", "capability": "Treasury crypto/fiat assets and quality warnings", "evidence": "/api/v0/exchange/treasury-intelligence"},
+]
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -215,6 +230,23 @@ async def exchange_tests(
     }
 
 
+@app.get("/api/v0/exchange/version-coverage")
+async def exchange_version_coverage(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_features", role)
+    return {
+        "version": VERSION,
+        "exchange_api_version": EXCHANGE_API_VERSION,
+        "coverage": EXCHANGE_VERSION_COVERAGE,
+        "implemented_versions": [
+            item["version"] for item in EXCHANGE_VERSION_COVERAGE
+            if item["status"] == "implemented"
+        ],
+        "action_executed": False,
+    }
+
+
 @app.post("/api/v0/exchange-tests/run")
 async def run_exchange_test(
     request: ExchangeAPITestRequest,
@@ -257,6 +289,89 @@ async def run_exchange_test(
             "duration_ms": round((datetime.now(UTC) - started).total_seconds() * 1000, 2),
             "error": str(exc),
         }
+
+
+@app.get("/api/v0/exchange/transaction-intelligence")
+async def exchange_transaction_intelligence(
+    limit: int = Query(default=25, ge=1, le=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_aggregate", role)
+    try:
+        if settings.bitagent_mode == "mock":
+            payloads = (
+                mock_data.health(), mock_data.transactions_summary(),
+                mock_data.pending("withdrawals"), mock_data.pending("deposits"),
+            )
+        else:
+            payloads = await asyncio.gather(
+                exchange_client.get("/api/bot/health"),
+                exchange_client.get("/api/bot/transactions/summary"),
+                exchange_client.get("/api/bot/withdrawals/pending", {"limit": limit}),
+                exchange_client.get("/api/bot/deposits/pending", {"limit": limit}),
+            )
+        return {
+            "version": VERSION, "exchange_api_version": EXCHANGE_API_VERSION,
+            **analyze_transaction_flow(*payloads),
+        }
+    except (ExchangeAPIError, ExchangeContractError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/v0/exchange/treasury-intelligence")
+async def exchange_treasury_intelligence(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    try:
+        if settings.bitagent_mode == "mock":
+            liabilities, treasury = mock_data.liabilities(), mock_data.treasury_assets()
+        else:
+            liabilities, treasury = await asyncio.gather(
+                exchange_client.get("/api/bot/ledger/liabilities"),
+                exchange_client.get("/api/bot/treasury/assets"),
+            )
+        return {
+            "version": VERSION, "exchange_api_version": EXCHANGE_API_VERSION,
+            **reconcile_treasury(liabilities, treasury),
+        }
+    except (ExchangeAPIError, ExchangeContractError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/v0/exchange/users/{user_id}/investigation")
+async def exchange_user_investigation(
+    user_id: int,
+    days: int = Query(default=30, ge=1, le=366),
+    limit: int = Query(default=50, ge=1, le=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_user_investigation", role)
+    if user_id < 1:
+        raise HTTPException(status_code=422, detail="user_id must be positive")
+    now = datetime.now(UTC)
+    period = {"date_from": (now - timedelta(days=days)).date().isoformat(), "date_to": now.date().isoformat()}
+    try:
+        if settings.bitagent_mode == "mock":
+            payloads = tuple(mock_data.user_dataset(user_id, kind) for kind in (
+                "summary", "balances", "trades", "deposits", "withdrawals", "pnl"
+            ))
+        else:
+            root = f"/api/bot/user/{user_id}"
+            payloads = await asyncio.gather(
+                exchange_client.get(f"{root}/summary"),
+                exchange_client.get(f"{root}/balances"),
+                exchange_client.get(f"{root}/trades", {**period, "limit": limit}),
+                exchange_client.get(f"{root}/deposits", {**period, "limit": limit}),
+                exchange_client.get(f"{root}/withdrawals", {**period, "limit": limit}),
+                exchange_client.get(f"{root}/pnl", period),
+            )
+        return {
+            "version": VERSION, "exchange_api_version": EXCHANGE_API_VERSION,
+            **summarize_user_investigation(*payloads),
+        }
+    except (ExchangeAPIError, ExchangeContractError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.get("/health")

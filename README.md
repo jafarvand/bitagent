@@ -2,16 +2,19 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.12.0 — XIMA Audited Output Channel**
+Current release: **2.13.0 — Exchange API 0.8 Intelligence Integration**
 
-## What version 0 shows
+## What the current release provides
 
 - Exchange API connection state and response freshness
 - 30-day operations totals
 - Pending-withdrawal warning
 - Single-market snapshot
-- Feature/API coverage matrix
-- Explicit gaps: treasury, liabilities, queues, workers, reconciliation, order-book risk
+- Exchange API `0.8.0-pilot` contract and direct endpoint diagnostics
+- Transaction summary plus cursor-paginated pending deposit/withdrawal intelligence
+- Ledger liabilities, treasury assets, and operational reconciliation
+- Minimized six-source user investigation with explicit incomplete-PnL handling
+- Feature/API coverage matrix and explicit remaining queue, worker, network, order-book, and production-evidence gaps
 - Mock mode for safe local evaluation
 - Live mode using the exchange's current HMAC protocol
 
@@ -27,6 +30,8 @@ docker compose up --build
 ```
 
 Open <http://localhost:8999>.
+The direct read-only exchange API console is at
+<http://localhost:8999/exchange-api-test>.
 
 For the production host, where the external `nginx-proxy` network and ACME
 challenge directory already exist, apply the production override explicitly:
@@ -109,6 +114,11 @@ uvicorn app.main:app --reload
 - `/api/v0/xima/pilot/shadow/evaluate` for measured shadow readiness
 - `/api/v0/xima/actions/*` for the local low-risk controlled-action sandbox
 - `GET /api/v0/xima/integrations/exchange/health` for safe gateway telemetry
+- `GET /api/v0/exchange/transaction-intelligence` for v0.5 aggregate and pending-flow evidence
+- `GET /api/v0/exchange/treasury-intelligence` for v0.7/v0.8 assets-versus-liabilities evidence
+- `GET /api/v0/exchange/users/{user_id}/investigation` for minimized six-route user evidence
+- `GET /api/v0/exchange-tests` and `POST /api/v0/exchange-tests/run` for the allowlisted 0.8 API console
+- `GET /api/v0/exchange/version-coverage` for explicit exchange v0.1–v0.8 implementation evidence
 - `GET /health`
 
 The user-resource proxy is disabled in the UI by default because it can expose
@@ -194,7 +204,8 @@ answers score zero and are never omitted from the overall result.
 | 2.9.0 | General maker-checker action sandbox and rollback | Complete |
 | 2.10.0 | Cross-domain executive priorities, coverage, KPI and evidence brief | Complete |
 | 2.11.0 | Bounded retry/circuit telemetry, secure CI, and platform operations baseline | Complete |
-| 2.12.0 | Tenant-scoped append-only agent output feed and integrity verification | Current |
+| 2.12.0 | Tenant-scoped append-only agent output feed and integrity verification | Complete |
+| 2.13.0 | Exchange API 0.8 contract validation, transaction intelligence, treasury reconciliation, and minimized user investigation | Current |
 
 ## Project documents
 

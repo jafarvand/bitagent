@@ -24,8 +24,8 @@ FEATURES = [
         "id": "contracts",
         "name": "Complete API contracts",
         "status": "available",
-        "source": "OpenAPI 0.2 pilot",
-        "description": "Stable response fields and shared structured error schemas.",
+        "source": "OpenAPI 0.8.0-pilot",
+        "description": "Contract envelope, scoped reads, structured errors, quality and lineage metadata.",
     },
     {
         "id": "operations",
@@ -170,16 +170,16 @@ FEATURES = [
     {
         "id": "treasury",
         "name": "Treasury balances",
-        "status": "missing",
-        "source": "Endpoint required",
-        "description": "Exchange-controlled wallet balances are not exposed.",
+        "status": "available",
+        "source": "GET /api/bot/treasury/assets",
+        "description": "Crypto custody totals and deduplicated company IRT balances with partial-source warnings.",
     },
     {
         "id": "pagination",
         "name": "Bounded pagination",
         "status": "partial",
-        "source": "Limit 1–100",
-        "description": "Page limits exist; cursor pagination and next_cursor remain open.",
+        "source": "Pending cursor + user limit 1–100",
+        "description": "Pending transaction routes use keyset cursors; legacy user activity remains limit-only.",
     },
     {
         "id": "timestamps",
@@ -191,16 +191,16 @@ FEATURES = [
     {
         "id": "upstream-health",
         "name": "Exchange dependency health",
-        "status": "missing",
-        "source": "GET /api/bot/health required",
-        "description": "Local health exists; upstream API and core dependency health are not exposed.",
+        "status": "available",
+        "source": "GET /api/bot/health",
+        "description": "Backend, database, matching-engine, maintenance, clock, and dependency state are exposed.",
     },
     {
         "id": "liabilities",
         "name": "Customer liabilities",
-        "status": "missing",
-        "source": "Endpoint required",
-        "description": "Aggregate customer balances per asset are not exposed.",
+        "status": "available",
+        "source": "GET /api/bot/ledger/liabilities",
+        "description": "Snapshot-based aggregate available, locked, total, and negative-balance evidence by asset.",
     },
     {
         "id": "queues",
@@ -212,9 +212,9 @@ FEATURES = [
     {
         "id": "reconciliation",
         "name": "Reconciliation",
-        "status": "missing",
-        "source": "Endpoint required",
-        "description": "Assets-versus-liabilities comparison is unavailable.",
+        "status": "partial",
+        "source": "GET /api/v0/exchange/treasury-intelligence",
+        "description": "Operational assets-versus-liabilities comparison exists; stale/manual sources prevent proof-of-reserves claims.",
     },
     {
         "id": "liquidity",

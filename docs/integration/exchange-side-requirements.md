@@ -22,6 +22,13 @@ The remaining routes below are roadmap requirements and must not be reported as
 implemented until they appear in the exchange OpenAPI contract. bitAgent's
 `/exchange-api-test` page tracks the implemented OpenAPI surface directly.
 
+bitAgent release `2.13.0` consumes this surface through three fail-closed,
+read-only intelligence routes: `/api/v0/exchange/transaction-intelligence`,
+`/api/v0/exchange/treasury-intelligence`, and
+`/api/v0/exchange/users/{user_id}/investigation`. CI compares the allowlisted
+connector catalog to every path in `docs/openapi.yaml`, so a copied exchange
+contract change requires an explicit connector and test update.
+
 ## 1. Delivery priorities
 
 ### P0 — required before a read-only pilot

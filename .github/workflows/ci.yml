@@ -39,9 +39,12 @@ jobs:
       - name: Verify deployed UI assets and API
         run: |
           curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'id="freshness-summary"'
-          curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'app.js?v=2.12.0-market-quality'
+          curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'app.js?v=2.13.0'
           curl --fail --silent 'http://127.0.0.1:8999/api/v0/dashboard?market=BTC_USDT&days=30' >/dev/null
           curl --fail --silent 'http://127.0.0.1:8999/api/v0/trends?limit=30' >/dev/null
+          curl --fail --silent -H 'X-BitAgent-Role: operator' 'http://127.0.0.1:8999/api/v0/exchange/transaction-intelligence?limit=5' >/dev/null
+          curl --fail --silent -H 'X-BitAgent-Role: operator' 'http://127.0.0.1:8999/api/v0/exchange/treasury-intelligence' >/dev/null
+          curl --fail --silent -H 'X-BitAgent-Role: operator' 'http://127.0.0.1:8999/api/v0/exchange/users/1/investigation?days=7&limit=5' >/dev/null
       - if: always()
         run: docker rm --force bitagent-ci
 
