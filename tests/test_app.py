@@ -1033,6 +1033,28 @@ def test_scoped_service_key_format_does_not_append_scopes_to_secret(monkeypatch)
     assert settings.exchange_credentials() == ("pilot-key", "test-secret")
 
 
+def test_non_retryable_exchange_auth_failure_does_not_open_circuit(monkeypatch):
+    monkeypatch.setattr(settings, "exchange_bot_key_id", "pilot-key")
+    monkeypatch.setattr(settings, "exchange_bot_secret", "test-secret")
+    exchange_client._consecutive_failures = 0
+    exchange_client._circuit_open_until = 0
+
+    async def unauthorized(*args, **kwargs):
+        request = httpx.Request("GET", "https://exchange.test/api/bot/health")
+        return httpx.Response(
+            401,
+            request=request,
+            json={"error": {"code": "service_auth_failed", "message": "Service authentication failed"}},
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", unauthorized)
+    for _ in range(4):
+        with pytest.raises(Exception, match="HTTP 401: service_auth_failed"):
+            asyncio.run(exchange_client.get("/api/bot/health"))
+
+    assert exchange_client.health_snapshot()["circuit"] == "closed"
+
+
 def test_marketing_foundation_is_governed_and_non_executing():
     body = client.get(
         "/api/v0/marketing/foundation",

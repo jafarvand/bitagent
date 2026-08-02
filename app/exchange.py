@@ -109,6 +109,7 @@ class ExchangeClient:
             raise ExchangeAPIError("Exchange circuit breaker is open")
         self._metrics["requests"] += 1
         last_error = None
+        last_retryable = True
         for attempt in range(settings.exchange_max_retries + 1):
             try:
                 async with httpx.AsyncClient(
@@ -130,6 +131,7 @@ class ExchangeClient:
                 last_error = exc
                 status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
                 retryable = status is None or status == 429 or status >= 500
+                last_retryable = retryable
                 if not retryable or attempt >= settings.exchange_max_retries:
                     break
                 self._metrics["retries"] += 1
@@ -139,13 +141,23 @@ class ExchangeClient:
                 )
                 delay = max(retry_after, settings.exchange_retry_base_seconds * (2 ** attempt))
                 await asyncio.sleep(min(delay, 5.0))
-        self._consecutive_failures += 1
+        if last_retryable:
+            self._consecutive_failures += 1
+        else:
+            self._consecutive_failures = 0
         self._metrics["failures"] += 1
         self._metrics["last_failure_at"] = str(int(time.time()))
         self._metrics["last_error_type"] = type(last_error).__name__
-        if self._consecutive_failures >= settings.exchange_circuit_failure_threshold:
+        if last_retryable and self._consecutive_failures >= settings.exchange_circuit_failure_threshold:
             self._circuit_open_until = time.monotonic() + settings.exchange_circuit_recovery_seconds
-        raise ExchangeAPIError(str(last_error)) from last_error
+        message = str(last_error)
+        if isinstance(last_error, httpx.HTTPStatusError):
+            body = last_error.response.json() if last_error.response.content else {}
+            error = body.get("error", body) if isinstance(body, dict) else {}
+            code = error.get("code") if isinstance(error, dict) else None
+            detail = error.get("message") if isinstance(error, dict) else None
+            message = f"HTTP {last_error.response.status_code}: {code or detail or 'exchange request failed'}"
+        raise ExchangeAPIError(message) from last_error
 
     def health_snapshot(self) -> dict:
         circuit_open = time.monotonic() < self._circuit_open_until
