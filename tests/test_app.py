@@ -50,7 +50,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.14.0"
+    assert response.json()["version"] == "2.15.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -63,7 +63,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.14.0' in response.text
+    assert '/static/app.js?v=2.15.0' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -101,7 +101,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=2.14.0-agents' in html
+    assert 'agent-chat.js?v=2.15.0-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -115,7 +115,7 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=2.14.0-knowledge' in html
+    assert 'knowledge.js?v=2.15.0-knowledge' in html
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -281,7 +281,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.14.0' in page.text
+    assert 'exchange-api-test.js?v=2.15.0' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -503,7 +503,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.14.0"
+    assert body["version"] == "2.15.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -637,7 +637,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.14.0",
+        "version": "2.15.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1170,7 +1170,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.14.0"
+    assert report["version"] == "2.15.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1265,7 +1265,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.14.0"
+    assert manifest["current_version"] == "2.15.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -2016,6 +2016,63 @@ def test_xima_operations_agent_blocks_stale_or_conflicting_evidence():
     assert result["confidence"] == "none"
     assert result["findings"] == []
     assert result["action_executed"] is False
+
+
+def test_xima_operations_root_cause_correlates_topology_rates_workers_and_networks():
+    result = client.post(
+        "/api/v0/xima/agents/operations/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "observed_at": datetime.now(UTC).isoformat(),
+            "evidence_refs": ["topology-1", "queue-1", "worker-1", "network-1"],
+            "owner": "operations", "evidence_fresh": True, "conflicting_fields": [],
+            "services": [{"name": "withdrawal-api", "error_rate_percent": 7,
+                          "p95_latency_ms": 2400, "capacity_used_percent": 91,
+                          "dependencies_healthy": False, "p99_latency_ms": 4100}],
+            "queues": [{"name": "withdrawal-jobs", "backlog": 1500,
+                        "oldest_age_seconds": 800, "throughput_per_minute": 20,
+                        "enqueue_rate_per_minute": 45, "failure_rate_percent": 6,
+                        "retry_count": 90, "dead_letter_count": 120,
+                        "consumer_count": 0, "capacity_used_percent": 98}],
+            "workers": [{"name": "withdrawal-workers", "heartbeat_age_seconds": 200,
+                         "available_workers": 0, "desired_workers": 5,
+                         "busy_workers": 0, "unhealthy_workers": 5, "restart_count": 12}],
+            "dependencies": [{"source": "withdrawal-api", "target": "wallet-provider",
+                              "state": "unavailable", "criticality": "critical",
+                              "failure_impact": "Withdrawal broadcasts cannot be submitted.",
+                              "owner": "wallet-platform", "runbook_id": "wallet-provider-outage"}],
+            "networks": [{"network": "TRC20", "deposits_enabled": True,
+                          "withdrawals_enabled": False, "sync_lag_blocks": 25,
+                          "peer_count": 2, "confirmation_target": 20,
+                          "observed_confirmation_seconds": 600, "wallet_connected": False,
+                          "maintenance": False, "reason": "provider unavailable"}],
+        },
+    ).json()["analysis"]
+
+    assert result["severity"] == "critical"
+    assert {item["type"] for item in result["findings"]} == {
+        "service", "queue", "worker", "dependency", "network"
+    }
+    queue = next(item for item in result["findings"] if item["type"] == "queue")
+    assert "arrival_rate_exceeds_throughput" in queue["conditions"]
+    assert "dead_letters_present" in queue["conditions"]
+    root = result["root_cause_analysis"]
+    assert root["status"] == "hypotheses_available"
+    assert root["confirmed_root_cause"] is None
+    assert root["confirmation_required"] is True
+    assert root["candidates"][0]["candidate"] == "wallet-provider"
+    assert root["candidates"][0]["causality"] == "hypothesis"
+
+    contract = client.get(
+        "/api/v0/xima/agents/operations/source-contract",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+    assert contract["all_live"] is False
+    assert [item["exchange_path"] for item in contract["sources"]] == [
+        "/api/bot/services/dependencies", "/api/bot/queues/status",
+        "/api/bot/workers/status", "/api/bot/networks/status",
+    ]
+    assert {item["status"] for item in contract["sources"]} == {"exchange_required"}
 
 
 def test_xima_market_agent_calculates_liquidity_abnormal_activity_and_limit_breaches():

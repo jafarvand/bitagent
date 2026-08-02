@@ -28,6 +28,7 @@ training, or steering approval as software features.
 | `2.13.0` | Exchange API 0.8 integration | Contract-validated transaction flow, treasury reconciliation, minimized user investigation, and direct endpoint diagnostics | Complete |
 | `2.13.1` | Domain agent workspaces and staging hardening | Eight domain-bound chat pages, audited agent identity, partial-source investigation resilience, and exchange-team staging report | Complete |
 | `2.14.0` | Governed knowledge management | Multi-format extraction, chunk hashes, duplicate controls, inventory, append-only lifecycle transitions, and retrieval evaluation | Complete |
+| `2.15.0` | Operations topology and root-cause intelligence | Dependency, queue, worker, capacity and network contracts with deterministic cross-source hypotheses | Complete |
 
 ## Definition of software completion
 

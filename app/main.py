@@ -114,7 +114,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.14.0"
+VERSION = "2.15.0"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -160,6 +160,12 @@ AGENT_CHAT_DEFINITIONS = {
         "samples": ["Which capability gaps remain?", "What does the audit chain prove?", "Can bitAgent execute a withdrawal or change a balance?"],
     },
 }
+OPERATIONS_SOURCE_CONTRACT = [
+    {"source": "services", "exchange_path": "/api/bot/services/dependencies", "status": "exchange_required"},
+    {"source": "queues", "exchange_path": "/api/bot/queues/status", "status": "exchange_required"},
+    {"source": "workers", "exchange_path": "/api/bot/workers/status", "status": "exchange_required"},
+    {"source": "networks", "exchange_path": "/api/bot/networks/status", "status": "exchange_required"},
+]
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -749,6 +755,17 @@ async def xima_operations_analyze(
         analysis.get("incident_key", request.observed_at.isoformat()), analysis,
     )
     return {"version": VERSION, "analysis": analysis}
+
+
+@app.get("/api/v0/xima/agents/operations/source-contract")
+async def xima_operations_source_contract(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "sources": OPERATIONS_SOURCE_CONTRACT,
+            "all_live": False,
+            "limitation": "These exchange-owned routes are not in OpenAPI 0.8.0-pilot.",
+            "action_executed": False}
 
 
 @app.post("/api/v0/xima/agents/market-risk/analyze")

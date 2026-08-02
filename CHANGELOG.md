@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.15.0] - 2026-08-02
+
+- Expanded operations evidence contracts for dependency topology, queue inflow/outflow, failures, retries, dead letters, consumers, worker capacity, and blockchain-network state.
+- Added deterministic cross-source root-cause hypotheses with explicit causality labels and mandatory confirmation boundaries.
+- Added a machine-readable source contract that keeps the four missing exchange-owned routes visible instead of claiming they are live.
+
 ## [2.14.0] - 2026-08-02
 
 - Added server-side TXT, Markdown, CSV, JSON, DOCX, and text-based PDF extraction with size and content validation.

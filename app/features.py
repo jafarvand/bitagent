@@ -7,6 +7,13 @@ FEATURES = [
         "description": "Separate domain-bound, sampled, cited, audited, read-only chat workspaces.",
     },
     {
+        "id": "operations-root-cause",
+        "name": "Operations topology and root-cause analysis",
+        "status": "available",
+        "source": "POST /api/v0/xima/agents/operations/analyze",
+        "description": "Correlates services, dependencies, queue rates, dead letters, workers, capacity and networks while labeling causal candidates as hypotheses.",
+    },
+    {
         "id": "readonly-chat",
         "name": "Read-only evidence chat",
         "status": "available",
