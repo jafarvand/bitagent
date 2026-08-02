@@ -14,7 +14,7 @@ from pydantic import SecretStr
 from app.config import settings
 from app.chat import build_prompt
 from app.chat import chat_rate_limiter
-from app.exchange import ExchangeClient
+from app.exchange import ExchangeClient, exchange_client
 from app.evidence import backup_and_verify, record_dashboard
 from app.main import app
 from app.market_risk import analyze_market_range
@@ -74,6 +74,51 @@ def test_dashboard_contains_every_required_javascript_dom_target():
     missing_ids = sorted(required_ids - html_ids)
 
     assert not missing_ids, f"app.js references missing DOM targets: {missing_ids}"
+
+
+def test_exchange_api_test_page_lists_every_documented_read_endpoint():
+    page = client.get("/exchange-api-test")
+    catalog = client.get(
+        "/api/v0/exchange-tests", headers={"X-BitAgent-Role": "operator"}
+    ).json()
+
+    assert page.status_code == 200
+    assert 'id="api-run-all"' in page.text
+    assert 'exchange-api-test.js?v=2.12.0-api-tests' in page.text
+    assert len(catalog["tests"]) == 32
+    assert catalog["credentials_exposed"] is False
+    assert all(item["method"] == "GET" for item in catalog["tests"])
+    assert {item["id"] for item in catalog["tests"]} >= {
+        "health", "operations", "ticker", "liabilities", "aml-cases",
+        "security-events", "support-tickets", "knowledge",
+    }
+
+
+def test_exchange_api_test_runs_only_allowlisted_signed_get(monkeypatch):
+    observed = {}
+
+    async def fake_get(path, params=None):
+        observed["path"] = path
+        return {"data": {"market": "USDT_IRT"}}
+
+    monkeypatch.setattr(exchange_client, "get", fake_get)
+    response = client.post(
+        "/api/v0/exchange-tests/run",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"test_id": "ticker", "market": "USDT_IRT", "case_id": "case-1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert observed["path"] == "/api/bot/market/USDT_IRT/ticker"
+    assert "credentials" not in str(response.json()).lower()
+
+    unknown = client.post(
+        "/api/v0/exchange-tests/run",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"test_id": "arbitrary-url", "market": "BTC_USDT"},
+    )
+    assert unknown.status_code == 404
 
 
 def test_status_reports_llm_configuration_without_credentials():

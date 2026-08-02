@@ -144,6 +144,97 @@ async def index():
     return FileResponse(ROOT / "static" / "index.html")
 
 
+@app.get("/exchange-api-test", include_in_schema=False)
+async def exchange_api_test_page():
+    return FileResponse(ROOT / "static" / "exchange-api-test.html")
+
+
+EXCHANGE_API_TESTS = [
+    ("health", "Platform", "/api/bot/health"),
+    ("dependencies", "Operations", "/api/bot/services/dependencies"),
+    ("operations", "Operations", "/api/bot/operations"),
+    ("transactions", "Operations", "/api/bot/transactions/summary"),
+    ("withdrawals", "Operations", "/api/bot/withdrawals/pending"),
+    ("deposits", "Operations", "/api/bot/deposits/pending"),
+    ("queues", "Operations", "/api/bot/queues/status"),
+    ("workers", "Operations", "/api/bot/workers/status"),
+    ("networks", "Operations", "/api/bot/networks/status"),
+    ("markets", "Market", "/api/bot/markets"),
+    ("market-summary", "Market", "/api/bot/market/{market}/summary"),
+    ("ticker", "Market", "/api/bot/market/{market}/ticker"),
+    ("order-book", "Market", "/api/bot/market/{market}/order-book"),
+    ("trades", "Market", "/api/bot/market/{market}/trades"),
+    ("candles", "Market", "/api/bot/market/{market}/candles"),
+    ("exposure", "Risk", "/api/bot/risk/exposure"),
+    ("market-limits", "Risk", "/api/bot/risk/market-limits"),
+    ("liabilities", "Treasury", "/api/bot/ledger/liabilities"),
+    ("treasury-assets", "Treasury", "/api/bot/treasury/assets"),
+    ("wallets", "Treasury", "/api/bot/wallets/summary"),
+    ("obligations", "Treasury", "/api/bot/treasury/obligations"),
+    ("reconciliation-runs", "Treasury", "/api/bot/reconciliation/runs"),
+    ("reconciliation-exceptions", "Treasury", "/api/bot/reconciliation/exceptions"),
+    ("aml-cases", "AML", "/api/bot/aml/cases"),
+    ("aml-evidence", "AML", "/api/bot/aml/cases/{case_id}/evidence"),
+    ("aml-queue", "AML", "/api/bot/aml/queue/summary"),
+    ("security-events", "Security", "/api/bot/security/events"),
+    ("security-incidents", "Security", "/api/bot/security/incidents"),
+    ("privileged-activity", "Security", "/api/bot/security/privileged-activity"),
+    ("support-tickets", "Support", "/api/bot/support/tickets"),
+    ("support-outcomes", "Support", "/api/bot/support/outcomes"),
+    ("knowledge", "Support", "/api/bot/knowledge/documents"),
+]
+
+
+class ExchangeAPITestRequest(BaseModel):
+    test_id: str = Field(min_length=1, max_length=80)
+    market: str = Field(default="BTC_USDT", pattern=r"^[A-Z0-9]+_[A-Z0-9]+$")
+    case_id: str = Field(default="test-case", pattern=r"^[A-Za-z0-9_-]+$")
+
+
+@app.get("/api/v0/exchange-tests")
+async def exchange_tests(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {
+        "version": VERSION,
+        "mode": settings.bitagent_mode,
+        "exchange_base_url": settings.exchange_api_base_url,
+        "credentials_exposed": False,
+        "tests": [
+            {"id": test_id, "group": group, "method": "GET", "path": path}
+            for test_id, group, path in EXCHANGE_API_TESTS
+        ],
+    }
+
+
+@app.post("/api/v0/exchange-tests/run")
+async def run_exchange_test(
+    request: ExchangeAPITestRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    selected = next((item for item in EXCHANGE_API_TESTS if item[0] == request.test_id), None)
+    if selected is None:
+        raise HTTPException(status_code=404, detail="Unknown exchange API test")
+    _, group, template = selected
+    path = template.format(market=request.market, case_id=request.case_id)
+    started = datetime.now(UTC)
+    try:
+        payload = await exchange_client.get(path)
+        return {
+            "ok": True, "group": group, "method": "GET", "path": path,
+            "duration_ms": round((datetime.now(UTC) - started).total_seconds() * 1000, 2),
+            "response": payload,
+        }
+    except ExchangeAPIError as exc:
+        return {
+            "ok": False, "group": group, "method": "GET", "path": path,
+            "duration_ms": round((datetime.now(UTC) - started).total_seconds() * 1000, 2),
+            "error": str(exc),
+        }
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": VERSION, "mode": settings.bitagent_mode}
