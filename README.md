@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.19.0 — Secure Event and Report Delivery**
+Current release: **3.0.0-rc.1 — Read-only Pilot Release Candidate**
 
 ## What the current release provides
 
@@ -19,6 +19,7 @@ Current release: **2.19.0 — Secure Event and Report Delivery**
 - Mock mode for safe local evaluation
 - Live mode using the exchange's current HMAC protocol
 - Timestamped signed-event ingestion, tenant routing, durable notification outbox, acknowledgements, and scheduled report manifests
+- Fail-closed pilot eligibility across identity, access review, audit, knowledge, delivery, exchange routes, domain sources, shadow reliability, owner acceptance, and steering approval
 
 No trade, transfer, withdrawal, balance, user, or configuration write action exists.
 
@@ -37,6 +38,7 @@ The direct read-only exchange API console is at
 The eight domain chat workspaces are available from <http://localhost:8999/agents>.
 The governed exchange policy and rules wizard is at <http://localhost:8999/knowledge>.
 The event, notification, and scheduled-report workspace is at <http://localhost:8999/delivery>.
+The consolidated read-only pilot gate report is at <http://localhost:8999/pilot-readiness>.
 
 Exchange-team staging results and required actions are recorded in
 [`docs/integration/exchange-api-0.8-staging-test-report.md`](docs/integration/exchange-api-0.8-staging-test-report.md).
@@ -221,7 +223,8 @@ answers score zero and are never omitted from the overall result.
 | 2.16.0 | Ticker, sequenced book, trade/candle quality, depth bands, divergence, exposure valuation, concentration, and limit utilization | Complete |
 | 2.17.0 | AML outcome controls, security integrity and privileged context, support outcome evaluation, and nine explicit upstream contracts | Complete |
 | 2.18.0 | OIDC signature/issuer/audience/MFA/role/tenant enforcement, access reviews, identity readiness, and credential-free observability | Complete |
-| 2.19.0 | Timestamped signed events, idempotent routing, durable outbox, acknowledgements, report schedules, and delivery posture | Current |
+| 2.19.0 | Timestamped signed events, idempotent routing, durable outbox, acknowledgements, report schedules, and delivery posture | Complete |
+| 3.0.0-rc.1 | Nine-gate read-only pilot manifest, evidence package validation, blocker dashboard, and fail-closed eligibility | Current RC; external gates pending |
 
 ## Project documents
 
@@ -231,6 +234,7 @@ answers score zero and are never omitted from the overall result.
 - [Remaining XIMA version roadmap](docs/planning/xima-version-roadmap.md)
 - [Detailed exchange-side API and platform requirements](docs/integration/exchange-side-requirements.md)
 - [XIMA software completion and external-gate matrix](docs/releases/xima-completion-matrix.md)
+- [3.0.0-rc.1 read-only pilot evidence gates](docs/releases/3.0-read-only-pilot-rc.md)
 - [Platform security and operations baseline](docs/security/platform-baseline.md)
 - [Master operations runbook](docs/runbooks/master-runbook.md)
 - [Architecture](docs/architecture/version-0.md)

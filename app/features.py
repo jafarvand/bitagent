@@ -321,4 +321,11 @@ FEATURES = [
         "source": "/api/v0/delivery/*",
         "description": "Timestamped HMAC webhooks, idempotent event receipts, severity routing, durable notification outbox, acknowledgements, and scheduled report manifests.",
     },
+    {
+        "id": "xima-read-only-pilot-gates",
+        "name": "XIMA read-only pilot release gates",
+        "status": "available",
+        "source": "GET /api/v0/releases/candidate",
+        "description": "Nine fail-closed runtime and external evidence gates with blocker details, package hash, receipt, and unconditional controlled-action disablement.",
+    },
 ]

@@ -1,0 +1,65 @@
+{
+  "tenant_id": "replace-with-pilot-tenant",
+  "exchange": {
+    "contract_version": "0.8.0-pilot",
+    "approved_by": "exchange-platform-owner",
+    "approved_at": "2026-08-03T00:00:00Z",
+    "authentication_passed": false,
+    "freshness_sla_approved": false,
+    "routes": [
+      {"path": "/api/bot/health", "passed": false, "evidence_ref": "test-report:route-01"},
+      {"path": "/api/bot/transactions/summary", "passed": false, "evidence_ref": "test-report:route-02"},
+      {"path": "/api/bot/withdrawals/pending", "passed": false, "evidence_ref": "test-report:route-03"},
+      {"path": "/api/bot/deposits/pending", "passed": false, "evidence_ref": "test-report:route-04"},
+      {"path": "/api/bot/operations", "passed": false, "evidence_ref": "test-report:route-05"},
+      {"path": "/api/bot/market/{market}/summary", "passed": false, "evidence_ref": "test-report:route-06"},
+      {"path": "/api/bot/ledger/liabilities", "passed": false, "evidence_ref": "test-report:route-07"},
+      {"path": "/api/bot/treasury/assets", "passed": false, "evidence_ref": "test-report:route-08"},
+      {"path": "/api/bot/user/{user_id}/summary", "passed": false, "evidence_ref": "test-report:route-09"},
+      {"path": "/api/bot/user/{user_id}/balances", "passed": false, "evidence_ref": "test-report:route-10"},
+      {"path": "/api/bot/user/{user_id}/trades", "passed": false, "evidence_ref": "test-report:route-11"},
+      {"path": "/api/bot/user/{user_id}/deposits", "passed": false, "evidence_ref": "test-report:route-12"},
+      {"path": "/api/bot/user/{user_id}/withdrawals", "passed": false, "evidence_ref": "test-report:route-13"},
+      {"path": "/api/bot/user/{user_id}/pnl", "passed": false, "evidence_ref": "test-report:route-14"}
+    ]
+  },
+  "upstream_sources": {
+    "approved_by": "exchange-data-owner",
+    "approved_at": "2026-08-03T00:00:00Z",
+    "freshness_sla_approved": false,
+    "live_paths": ["replace-with-only-paths-proven-live"]
+  },
+  "knowledge": {
+    "approved_by": "knowledge-owner",
+    "approved_at": "2026-08-03T00:00:00Z",
+    "owner_reviewed": false,
+    "privacy_retention_approved": false,
+    "document_ids": ["replace-with-approved-document-id"]
+  },
+  "shadow_pilot": {
+    "tenant_id": "replace-with-pilot-tenant",
+    "window_start": "2026-07-27T00:00:00Z",
+    "window_end": "2026-08-03T00:00:00Z",
+    "evidence_refs": ["shadow-report:replace-me"],
+    "owner": "operations-owner",
+    "outcomes": [{"outcome_id": "replace-me", "alert_key": "replace-me", "predicted_material": false, "actual_material": true, "workflow_latency_ms": 0}],
+    "scheduled_reports": [{"report_id": "replace-me", "generated_within_sla": false}],
+    "reliability": {
+      "load_test_passed": false,
+      "soak_test_passed": false,
+      "failover_test_passed": false,
+      "backup_restore_passed": false,
+      "monitoring_verified": false,
+      "on_call_runbook_ref": null,
+      "escalation_runbook_ref": null,
+      "training_record_refs": [],
+      "acceptance_roles": []
+    }
+  },
+  "steering": {
+    "approved_at": "2026-08-03T00:00:00Z",
+    "approved_by": ["replace-with-chair", "replace-with-security-chair"],
+    "read_only_pilot_approved": false,
+    "controlled_actions_approved": false
+  }
+}

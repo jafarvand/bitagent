@@ -90,7 +90,7 @@ from app.marketing import (
 from app.ollama import OllamaError, ollama_client
 from app.policy import evaluate_policy
 from app.release_inputs import validate_release_inputs
-from app.release_candidate import build_release_candidate_manifest
+from app.pilot import build_pilot_manifest, load_pilot_evidence
 from app.readiness import (
     historical_replay,
     load_upstream_security_report,
@@ -126,7 +126,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.19.0"
+VERSION = "3.0.0-rc.1"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -302,6 +302,11 @@ async def knowledge_workspace():
 @app.get("/delivery", include_in_schema=False)
 async def delivery_workspace():
     return FileResponse(ROOT / "static" / "delivery.html")
+
+
+@app.get("/pilot-readiness", include_in_schema=False)
+async def pilot_readiness_workspace():
+    return FileResponse(ROOT / "static" / "pilot-readiness.html")
 
 
 @app.get("/api/v0/agents")
@@ -2010,11 +2015,37 @@ async def delivery_readiness_posture(
 
 @app.get("/api/v0/releases/candidate")
 async def release_candidate(
+    tenant_id: str = Query(default="exchange-a", min_length=1, max_length=100),
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
-    report = await readiness_report(role)
-    return build_release_candidate_manifest(
-        report["uat"], current_version=VERSION
+    authorize("view_audit", role)
+    upstream_paths = {
+        item["exchange_path"]
+        for item in OPERATIONS_SOURCE_CONTRACT + MARKET_SOURCE_CONTRACT + [
+            source for sources in DOMAIN_SOURCE_CONTRACT.values() for source in sources
+        ]
+    }
+    return build_pilot_manifest(
+        current_version=VERSION,
+        tenant_id=tenant_id,
+        identity=identity_readiness(settings),
+        access_reviews=recent_access_reviews(
+            settings.evidence_db_path, tenant_id, 20
+        ),
+        audit={
+            "evidence": verify_chain(settings.evidence_db_path),
+            "xima_outputs": verify_xima_output_chain(settings.evidence_db_path),
+        },
+        knowledge_items=list_knowledge(
+            settings.evidence_db_path, tenant_id, "admin"
+        ),
+        delivery=delivery_posture(
+            settings.evidence_db_path, tenant_id,
+            bool(settings.bitagent_event_webhook_secret.get_secret_value()),
+        ),
+        pilot_evidence=load_pilot_evidence(settings.release_evidence_directory),
+        exchange_paths={item[2] for item in EXCHANGE_API_TESTS},
+        upstream_paths=upstream_paths,
     )
 
 

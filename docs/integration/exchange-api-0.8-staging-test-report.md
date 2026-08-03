@@ -2,7 +2,7 @@
 
 Prepared for: Exchange engineering, platform, matching-engine, treasury, and security teams  
 Test date: 2026-08-03 UTC
-bitAgent release: `2.19.0`
+bitAgent release: `3.0.0-rc.1`
 Exchange contract: `0.8.0-pilot`  
 Environment: isolated synthetic staging
 

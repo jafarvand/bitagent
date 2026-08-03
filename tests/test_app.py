@@ -30,7 +30,7 @@ from app.market_risk import analyze_market_range
 from app.ollama import OllamaClient
 from app.release_inputs import validate_release_inputs
 from scripts.evaluate_chat import question_set, score
-from app.release_candidate import build_release_candidate_manifest
+from app.pilot import build_pilot_manifest, load_pilot_evidence
 from app.xima_support import extract_document_text
 
 
@@ -55,7 +55,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.19.0"
+    assert response.json()["version"] == "3.0.0-rc.1"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -68,7 +68,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.19.0' in response.text
+    assert '/static/app.js?v=3.0.0-rc.1' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -106,7 +106,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=2.19.0-agents' in html
+    assert 'agent-chat.js?v=3.0.0-rc.1-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -120,7 +120,7 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=2.19.0-knowledge' in html
+    assert 'knowledge.js?v=3.0.0-rc.1-knowledge' in html
 
 
 def test_delivery_center_has_complete_dom_targets():
@@ -132,8 +132,21 @@ def test_delivery_center_has_complete_dom_targets():
     assert client.get("/delivery").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "SECURE EVENT AND REPORT DELIVERY" in html
-    assert 'delivery.js?v=2.19.0-delivery' in html
+    assert 'delivery.js?v=3.0.0-rc.1-delivery' in html
     assert 'href="/delivery"' in client.get("/").text
+
+
+def test_pilot_readiness_page_has_complete_dom_targets():
+    html = client.get("/pilot-readiness").text
+    script = client.get("/static/pilot-readiness.js").text
+    html_ids = set(re.findall(r'id="([^"]+)"', html))
+    script_ids = set(re.findall(r'pilot\("([^"]+)"\)', script))
+
+    assert client.get("/pilot-readiness").status_code == 200
+    assert not sorted(script_ids - html_ids)
+    assert "READ-ONLY PILOT RELEASE CANDIDATE" in html
+    assert 'pilot-readiness.js?v=3.0.0-rc.1' in html
+    assert 'href="/pilot-readiness"' in client.get("/").text
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -299,7 +312,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.19.0' in page.text
+    assert 'exchange-api-test.js?v=3.0.0-rc.1' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -521,7 +534,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.19.0"
+    assert body["version"] == "3.0.0-rc.1"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -655,7 +668,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.19.0",
+        "version": "3.0.0-rc.1",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1188,7 +1201,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.19.0"
+    assert report["version"] == "3.0.0-rc.1"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1277,35 +1290,130 @@ def test_release_owner_inputs_are_validated_and_replayed(tmp_path):
     assert all(item["sha256"] for key, item in result.items() if isinstance(item, dict) and item.get("status") == "valid")
 
 
-def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
-    response = client.get("/api/v0/releases/candidate")
+def test_3_0_release_candidate_fails_closed_without_external_evidence():
+    response = client.get(
+        "/api/v0/releases/candidate?tenant_id=exchange-a",
+        headers={"X-BitAgent-Role": "auditor"},
+    )
     assert response.status_code == 200
     manifest = response.json()
 
-    assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.19.0"
+    assert manifest["candidate_version"] == "3.0.0-rc.1"
+    assert manifest["current_version"] == "3.0.0-rc.1"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
+    assert {item["id"] for item in manifest["blockers"]} >= {
+        "production-identity", "governed-knowledge", "secure-delivery",
+        "exchange-api-contract", "upstream-domain-sources",
+        "shadow-and-reliability", "steering-read-only-approval",
+    }
     assert len(manifest["evidence_sha256"]) == 64
+    assert manifest["controlled_actions_enabled"] is False
+    assert manifest["secrets_exposed"] is False
     assert manifest["action_executed"] is False
 
 
-def test_1_0_candidate_approval_requires_every_gate_to_pass():
-    readiness = {
-        "gates": [
-            {"id": "replay", "status": "pass", "evidence": "6/6"},
-            {"id": "approval", "status": "pass", "evidence": "validated"},
-        ]
+def test_3_0_release_candidate_requires_complete_synthetic_evidence(tmp_path):
+    exchange_paths = {
+        "/api/bot/health", "/api/bot/transactions/summary",
+        "/api/bot/withdrawals/pending", "/api/bot/deposits/pending",
+        "/api/bot/operations", "/api/bot/market/{market}/summary",
+        "/api/bot/ledger/liabilities", "/api/bot/treasury/assets",
+        "/api/bot/user/{user_id}/summary", "/api/bot/user/{user_id}/balances",
+        "/api/bot/user/{user_id}/trades", "/api/bot/user/{user_id}/deposits",
+        "/api/bot/user/{user_id}/withdrawals", "/api/bot/user/{user_id}/pnl",
     }
+    upstream_paths = {
+        "/api/bot/services/dependencies", "/api/bot/queues/status",
+        "/api/bot/workers/status", "/api/bot/networks/status",
+        "/api/bot/markets", "/api/bot/market/{market}/ticker",
+        "/api/bot/market/{market}/order-book", "/api/bot/market/{market}/trades",
+        "/api/bot/market/{market}/candles", "/api/bot/risk/exposure",
+        "/api/bot/risk/market-limits", "/api/bot/aml/cases",
+        "/api/bot/aml/cases/{case_id}/evidence", "/api/bot/aml/queue/summary",
+        "/api/bot/security/events", "/api/bot/security/incidents",
+        "/api/bot/security/privileged-activity", "/api/bot/support/tickets",
+        "/api/bot/support/outcomes", "/api/bot/knowledge/documents",
+    }
+    now = datetime.now(UTC)
+    package = {
+        "tenant_id": "exchange-a",
+        "exchange": {
+            "contract_version": "0.8.0-pilot", "approved_by": "platform-owner",
+            "approved_at": now.isoformat(), "authentication_passed": True,
+            "freshness_sla_approved": True,
+            "routes": [{"path": path, "passed": True, "evidence_ref": f"run:{index}"}
+                       for index, path in enumerate(sorted(exchange_paths), 1)],
+        },
+        "upstream_sources": {
+            "approved_by": "data-owner", "approved_at": now.isoformat(),
+            "freshness_sla_approved": True, "live_paths": sorted(upstream_paths),
+        },
+        "knowledge": {
+            "approved_by": "knowledge-owner", "approved_at": now.isoformat(),
+            "owner_reviewed": True, "privacy_retention_approved": True,
+            "document_ids": ["pilot-policy"],
+        },
+        "shadow_pilot": {
+            "tenant_id": "exchange-a",
+            "window_start": (now - timedelta(days=7)).isoformat(),
+            "window_end": now.isoformat(), "evidence_refs": ["shadow:run-1"],
+            "owner": "operations",
+            "outcomes": [
+                {"outcome_id": "one", "alert_key": "one", "predicted_material": True,
+                 "actual_material": True, "workflow_latency_ms": 100},
+                {"outcome_id": "two", "alert_key": "two", "predicted_material": False,
+                 "actual_material": False, "workflow_latency_ms": 120},
+            ],
+            "scheduled_reports": [{"report_id": "daily", "generated_within_sla": True}],
+            "reliability": {
+                "load_test_passed": True, "soak_test_passed": True,
+                "failover_test_passed": True, "backup_restore_passed": True,
+                "monitoring_verified": True, "on_call_runbook_ref": "runbook:on-call",
+                "escalation_runbook_ref": "runbook:escalation",
+                "training_record_refs": ["training:operators"],
+                "acceptance_roles": ["operations", "risk", "treasury", "aml",
+                                     "security", "support", "privacy", "compliance"],
+            },
+        },
+        "steering": {
+            "approved_at": now.isoformat(),
+            "approved_by": ["steering-chair", "security-chair"],
+            "read_only_pilot_approved": True, "controlled_actions_approved": False,
+        },
+    }
+    (tmp_path / "pilot.local.json").write_text(json.dumps(package), encoding="utf-8")
+    evidence = load_pilot_evidence(str(tmp_path))
+    runtime = {
+        "current_version": "3.0.0-rc.1", "tenant_id": "exchange-a",
+        "identity": {"status": "ready"},
+        "access_reviews": [{"approved": True, "exception_count": 0,
+                            "next_review_at": (now + timedelta(days=30)).isoformat()}],
+        "audit": {"evidence": {"valid": True}, "xima_outputs": {"valid": True}},
+        "knowledge_items": [{"document_id": "pilot-policy", "status": "approved",
+                             "lifecycle": "active"}],
+        "delivery": {"ready": True}, "pilot_evidence": evidence,
+        "exchange_paths": exchange_paths, "upstream_paths": upstream_paths,
+    }
+    first = build_pilot_manifest(**runtime)
+    second = build_pilot_manifest(**runtime)
 
-    first = build_release_candidate_manifest(readiness, current_version="0.9.3")
-    second = build_release_candidate_manifest(readiness, current_version="0.9.3")
-
-    assert first["decision"] == "approved_for_controlled_pilot"
+    assert first["decision"] == "eligible_for_read_only_pilot_review"
     assert first["approved"] is True
+    assert first["passed"] == first["total"] == 9
     assert first["blockers"] == []
+    assert first["shadow_evaluation"]["status"] == "ready"
+    assert first["controlled_actions_enabled"] is False
     assert first["evidence_sha256"] == second["evidence_sha256"]
+
+    package["steering"]["approved_by"] = ["same-approver", "same-approver"]
+    (tmp_path / "pilot.local.json").write_text(json.dumps(package), encoding="utf-8")
+    runtime["pilot_evidence"] = load_pilot_evidence(str(tmp_path))
+    duplicate_approver = build_pilot_manifest(**runtime)
+    assert "steering-read-only-approval" in {
+        item["id"] for item in duplicate_approver["blockers"]
+    }
 
 
 def test_feature_gaps_are_explicit():

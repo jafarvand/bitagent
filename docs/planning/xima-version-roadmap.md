@@ -33,6 +33,7 @@ training, or steering approval as software features.
 | `2.17.0` | Minimized domain connector contracts | AML outcomes, security integrity/privilege context, support evaluation, and nine explicit upstream contracts | Complete |
 | `2.18.0` | Production identity and observability controls | OIDC signature/claims/MFA/tenant enforcement, access-review receipts, readiness and credential-free telemetry posture | Complete |
 | `2.19.0` | Secure event and report delivery | Timestamped signed webhooks, idempotent routing, durable outbox, acknowledgements, report schedules and delivery posture | Complete |
+| `3.0.0-rc.1` | Read-only pilot release candidate | Consolidated runtime and external evidence gates, blocker receipt, exportable dashboard and unconditional controlled-action disablement | Complete; real pilot evidence pending |
 
 ## Definition of software completion
 

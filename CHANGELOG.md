@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [3.0.0-rc.1] - 2026-08-03
+
+- Replaced the narrow legacy candidate decision with nine mandatory tenant gates spanning identity, access review, audit integrity, knowledge, delivery, all 14 exchange routes, all 20 domain sources, shadow reliability, and steering approval.
+- Added a validated, credential-free external pilot evidence package covering real outcomes, report SLA, load, soak, failover, restore, monitoring, runbooks, training, eight owner roles, and exact source inventories.
+- Added a pilot-readiness dashboard with blocker evidence and JSON export; controlled actions remain unconditionally disabled and the default deployment remains blocked.
+
 ## [2.19.0] - 2026-08-03
 
 - Added timestamped HMAC-SHA256 event ingestion with replay-window validation, tenant-scoped idempotency, evidence references, and duplicate rejection.
