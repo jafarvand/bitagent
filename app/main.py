@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -47,6 +47,10 @@ from app.evidence import (
 )
 from app.features import FEATURES
 from app.incidents import detect_withdrawal_slowdown
+from app.identity import (
+    AccessReviewRequest, identity_context, identity_readiness, recent_access_reviews,
+    record_access_review, verify_oidc_token,
+)
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 from app.marketing import (
@@ -116,7 +120,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.17.0"
+VERSION = "2.18.0"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -209,7 +213,43 @@ app.mount(
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 
+@app.middleware("http")
+async def oidc_identity_boundary(request: Request, call_next):
+    if (settings.bitagent_identity_mode != "oidc"
+            or not request.url.path.startswith("/api/v0")
+            or request.url.path == "/api/v0/identity/readiness"):
+        return await call_next(request)
+    authorization = request.headers.get("authorization", "")
+    if not authorization.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": {
+            "code": "oidc_bearer_required", "action_executed": False}})
+    try:
+        identity = verify_oidc_token(authorization[7:].strip(), settings)
+    except Exception:
+        return JSONResponse(status_code=401, content={"detail": {
+            "code": "oidc_token_invalid", "action_executed": False}})
+    tenant_id = request.query_params.get("tenant_id")
+    if request.headers.get("content-type", "").startswith("application/json"):
+        try:
+            payload = json.loads((await request.body()) or b"{}")
+            if isinstance(payload, dict) and isinstance(payload.get("tenant_id"), str):
+                tenant_id = payload["tenant_id"]
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+    if tenant_id and tenant_id != identity["tenant_id"]:
+        return JSONResponse(status_code=403, content={"detail": {
+            "code": "identity_tenant_mismatch", "action_executed": False}})
+    token = identity_context.set(identity)
+    try:
+        return await call_next(request)
+    finally:
+        identity_context.reset(token)
+
+
 def authorize(capability: str, role: str | None) -> dict:
+    identity = identity_context.get()
+    if settings.bitagent_identity_mode == "oidc" and identity:
+        role = identity["role"]
     enforced = settings.bitagent_access_control_mode == "enforced"
     decision = evaluate_policy(role, capability, enforced=enforced)
     decision["audit"] = record_access_decision(settings.evidence_db_path, decision)
@@ -1777,6 +1817,56 @@ async def readiness_report(
         "upstream_security": upstream_security,
         "release_inputs": release_inputs,
     }
+
+
+@app.get("/api/v0/identity/readiness")
+async def production_identity_readiness():
+    return {"version": VERSION, **identity_readiness(settings), "action_executed": False}
+
+
+@app.post("/api/v0/identity/access-reviews", status_code=201)
+async def identity_access_review_create(
+    request: AccessReviewRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("manage_xima_governance", role)
+    try:
+        result = record_access_review(settings.evidence_db_path, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "access_review_invalid",
+                                                     "message": str(exc)}) from exc
+    return {"version": VERSION, "review": result, "action_executed": False}
+
+
+@app.get("/api/v0/identity/access-reviews")
+async def identity_access_review_recent(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    limit: int = Query(default=20, ge=1, le=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    return {"version": VERSION, "tenant_id": tenant_id,
+            "items": recent_access_reviews(settings.evidence_db_path, tenant_id, limit),
+            "action_executed": False}
+
+
+@app.get("/api/v0/observability")
+async def observability_report(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    contracts = OPERATIONS_SOURCE_CONTRACT + MARKET_SOURCE_CONTRACT + [
+        item for items in DOMAIN_SOURCE_CONTRACT.values() for item in items]
+    return {"version": VERSION,
+            "identity": identity_readiness(settings),
+            "exchange_gateway": exchange_client.health_snapshot(),
+            "audit": {"evidence": verify_chain(settings.evidence_db_path),
+                      "xima_outputs": verify_xima_output_chain(settings.evidence_db_path)},
+            "upstream_contracts": {"total": len(contracts),
+                                   "live": sum(item["status"] == "live" for item in contracts),
+                                   "exchange_required": sum(item["status"] == "exchange_required"
+                                                            for item in contracts)},
+            "secrets_exposed": False, "action_executed": False}
 
 
 @app.get("/api/v0/releases/candidate")

@@ -28,6 +28,13 @@ FEATURES = [
         "description": "Nine minimized upstream source contracts plus richer AML outcomes, security integrity and privileged controls, and support outcome evaluation.",
     },
     {
+        "id": "production-identity-observability",
+        "name": "Production identity and observability posture",
+        "status": "available",
+        "source": "/api/v0/identity/readiness + /api/v0/observability",
+        "description": "RS256/ES256 OIDC verification, issuer/audience/MFA/tenant/role enforcement, hashed subjects, access-review receipts, gateway telemetry and audit/source posture.",
+    },
+    {
         "id": "readonly-chat",
         "name": "Read-only evidence chat",
         "status": "available",

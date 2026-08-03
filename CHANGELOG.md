@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.18.0] - 2026-08-02
+
+- Added RS256/ES256 OIDC bearer verification with issuer, audience, expiry, MFA, role, and tenant binding; production mode ignores the pilot role header.
+- Added fail-closed identity readiness gates and append-only tenant access-review evidence receipts.
+- Added a credential-free observability posture covering identity, exchange gateway telemetry, evidence/output audit chains, and missing upstream source contracts.
+
 ## [2.17.0] - 2026-08-02
 
 - Added nine minimized AML/fraud, security, support, outcome, and knowledge upstream connector contracts with explicit exchange-required status.

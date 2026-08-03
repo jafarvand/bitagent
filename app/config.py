@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     evidence_db_path: str = ".data/bitagent.db"
     evidence_freshness_warning_seconds: int = 120
     bitagent_access_control_mode: Literal["observe", "enforced"] = "observe"
+    bitagent_identity_mode: Literal["pilot_header", "oidc"] = "pilot_header"
+    bitagent_oidc_issuer: str = ""
+    bitagent_oidc_audience: str = ""
+    bitagent_oidc_jwks_url: str = ""
+    bitagent_oidc_public_key: SecretStr = SecretStr("")
+    bitagent_oidc_role_claim: str = "bitagent_role"
+    bitagent_oidc_tenant_claim: str = "tenant_id"
+    bitagent_oidc_require_mfa: bool = True
+    bitagent_access_review_ref: str = ""
     upstream_security_report_path: str = ".data/upstream-security-report.json"
     release_evidence_directory: str = "integration-input/release-evidence"
     bitagent_chat_enabled: bool = False

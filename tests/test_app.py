@@ -12,7 +12,10 @@ from pathlib import Path
 
 import pytest
 import httpx
+import jwt
 from fastapi.testclient import TestClient
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import SecretStr
 
 from app import mock_data
@@ -50,7 +53,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.17.0"
+    assert response.json()["version"] == "2.18.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -63,7 +66,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.17.0' in response.text
+    assert '/static/app.js?v=2.18.0' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -101,7 +104,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=2.17.0-agents' in html
+    assert 'agent-chat.js?v=2.18.0-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -115,7 +118,7 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=2.17.0-knowledge' in html
+    assert 'knowledge.js?v=2.18.0-knowledge' in html
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -281,7 +284,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.17.0' in page.text
+    assert 'exchange-api-test.js?v=2.18.0' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -503,7 +506,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.17.0"
+    assert body["version"] == "2.18.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -637,7 +640,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.17.0",
+        "version": "2.18.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1170,7 +1173,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.17.0"
+    assert report["version"] == "2.18.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1265,7 +1268,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.17.0"
+    assert manifest["current_version"] == "2.18.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -2523,6 +2526,63 @@ def test_domain_connector_contracts_outcomes_and_minimized_control_fields():
     assert sum(len(items) for items in contract["domains"].values()) == 9
     assert all(item["status"] == "exchange_required"
                for items in contract["domains"].values() for item in items)
+
+
+def test_oidc_boundary_enforces_signature_issuer_audience_mfa_role_and_tenant(monkeypatch):
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_pem = private_key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode()
+    monkeypatch.setattr(settings, "bitagent_identity_mode", "oidc")
+    monkeypatch.setattr(settings, "bitagent_oidc_issuer", "https://identity.exchange.test")
+    monkeypatch.setattr(settings, "bitagent_oidc_audience", "bitagent")
+    monkeypatch.setattr(settings, "bitagent_oidc_public_key", SecretStr(public_pem))
+    monkeypatch.setattr(settings, "bitagent_oidc_jwks_url", "")
+    monkeypatch.setattr(settings, "bitagent_oidc_require_mfa", True)
+    monkeypatch.setattr(settings, "bitagent_access_review_ref", "iam-review:2026-08")
+    monkeypatch.setattr(settings, "bitagent_access_control_mode", "enforced")
+    now = int(datetime.now(UTC).timestamp())
+
+    def token(role="admin", tenant="exchange-a", mfa=True):
+        return jwt.encode({"iss": settings.bitagent_oidc_issuer, "aud": "bitagent",
+                           "sub": "person-123", "iat": now, "exp": now + 300,
+                           "bitagent_role": role, "tenant_id": tenant,
+                           "amr": ["pwd", "mfa"] if mfa else ["pwd"]},
+                          private_key, algorithm="RS256")
+
+    readiness = client.get("/api/v0/identity/readiness").json()
+    missing = client.get("/api/v0/features")
+    valid = client.get("/api/v0/features", headers={"Authorization": f"Bearer {token()}"})
+    no_mfa = client.get("/api/v0/features", headers={"Authorization": f"Bearer {token(mfa=False)}"})
+    mismatch = client.get(
+        "/api/v0/xima/knowledge/documents?tenant_id=exchange-b",
+        headers={"Authorization": f"Bearer {token()}"},
+    )
+    review = client.post(
+        "/api/v0/identity/access-reviews",
+        headers={"Authorization": f"Bearer {token()}"},
+        json={"tenant_id": "exchange-a", "reviewed_at": "2026-08-01T00:00:00Z",
+              "reviewer": "iam-owner", "subject_count": 12, "exception_count": 0,
+              "approved": True, "evidence_ref": "iam-review:2026-08",
+              "next_review_at": "2026-09-01T00:00:00Z"},
+    )
+    observed = client.get(
+        "/api/v0/observability", headers={"Authorization": f"Bearer {token()}"}
+    ).json()
+
+    assert readiness["status"] == "ready"
+    assert readiness["pilot_header_allowed"] is False
+    assert missing.status_code == 401
+    assert valid.status_code == 200
+    assert no_mfa.status_code == 401
+    assert mismatch.status_code == 403
+    assert mismatch.json()["detail"]["code"] == "identity_tenant_mismatch"
+    assert review.status_code == 201
+    assert len(review.json()["review"]["record_hash"]) == 64
+    assert observed["identity"]["status"] == "ready"
+    assert observed["exchange_gateway"]["credentials_exposed"] is False
+    assert observed["upstream_contracts"]["exchange_required"] == 20
+    assert observed["secrets_exposed"] is False
 
 
 def test_xima_cross_domain_policy_fails_closed_for_prohibited_cross_tenant_and_restricted_data():
