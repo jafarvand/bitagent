@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>bitAgent · Management Question Center</title>
+  <link rel="stylesheet" href="/static/styles.css?v=2.16.0">
+  <style>
+    .mq-shell{max-width:1400px;margin:0 auto;padding:28px}.mq-summary,.mq-filters,.mq-card{background:#fff;border:1px solid #dbe4f0;border-radius:18px;box-shadow:0 12px 30px rgba(15,23,42,.06)}
+    .mq-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:18px;margin:20px 0}.mq-stat strong{display:block;font-size:1.7rem}.mq-stat span{color:#64748b}
+    .mq-filters{display:flex;gap:12px;flex-wrap:wrap;padding:16px;margin-bottom:18px}.mq-filters select,.mq-filters input{padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;min-width:180px}
+    .mq-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.mq-card{padding:18px}.mq-head{display:flex;justify-content:space-between;gap:12px}.mq-card h2{font-size:1.05rem;margin:0}.mq-meta{color:#64748b;font-size:.88rem;margin-top:10px}.pill{border-radius:999px;padding:5px 9px;font-size:.75rem;font-weight:700}.supported{background:#dcfce7;color:#166534}.partial{background:#fef3c7;color:#92400e}.blocked{background:#fee2e2;color:#991b1b}.mq-missing{margin-top:12px;padding:10px;background:#f8fafc;border-radius:10px;font-size:.86rem}.mq-empty{padding:30px;text-align:center;color:#64748b}
+    @media(max-width:850px){.mq-summary,.mq-grid{grid-template-columns:1fr}.mq-shell{padding:14px}}
+  </style>
+</head>
+<body>
+<header class="topbar"><a class="brand" href="/"><span class="brand-mark">b</span><span>bitAgent</span></a><div class="top-actions"><a class="refresh-button" href="/agents">Agent chats</a><span class="release-chip">READ-ONLY</span><span class="version">v2.16.0</span></div></header>
+<main class="mq-shell">
+  <section class="hero"><div><p class="eyebrow">MANAGEMENT QUESTION & EVIDENCE READINESS CENTER</p><h1>Ask what matters.<br><span>See what the evidence can prove.</span></h1><p class="intro">Twenty management questions mapped to agents, use cases, current coverage, and missing exchange evidence. No exchange action is executed.</p></div></section>
+  <section class="mq-summary" id="summary"></section>
+  <section class="mq-filters"><select id="domain"><option value="">All domains</option></select><select id="coverage"><option value="">All coverage</option><option value="supported">Supported</option><option value="partial">Partial</option><option value="blocked">Blocked</option></select><input id="search" placeholder="Search questions or use cases"><button id="reset" type="button">Reset</button></section>
+  <section class="mq-grid" id="questions"></section>
+</main>
+<footer>bitAgent 2.16.0 · Management Question Center · Evidence readiness only · No exchange action executed</footer>
+<script src="/static/management-questions.js?v=2.16.0"></script>
+</body>
+</html>
