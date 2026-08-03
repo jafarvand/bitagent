@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.19.0] - 2026-08-03
+
+- Added timestamped HMAC-SHA256 event ingestion with replay-window validation, tenant-scoped idempotency, evidence references, and duplicate rejection.
+- Added governed notification subscriptions, severity filtering, durable local outbox records, and explicit acknowledgements without pretending an external message was sent.
+- Added scheduled domain/executive report manifests, due-run processing, delivery posture, and an operator-facing Delivery Center.
+
 ## [2.18.0] - 2026-08-02
 
 - Added RS256/ES256 OIDC bearer verification with issuer, audience, expiry, MFA, role, and tenant binding; production mode ignores the pilot role header.

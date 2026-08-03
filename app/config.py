@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     bitagent_oidc_tenant_claim: str = "tenant_id"
     bitagent_oidc_require_mfa: bool = True
     bitagent_access_review_ref: str = ""
+    bitagent_event_webhook_secret: SecretStr = SecretStr("")
+    bitagent_event_webhook_tolerance_seconds: int = 300
     upstream_security_report_path: str = ".data/upstream-security-report.json"
     release_evidence_directory: str = "integration-input/release-evidence"
     bitagent_chat_enabled: bool = False

@@ -51,6 +51,12 @@ from app.identity import (
     AccessReviewRequest, identity_context, identity_readiness, recent_access_reviews,
     record_access_review, verify_oidc_token,
 )
+from app.delivery import (
+    EventIngressRequest, NotificationSubscriptionRequest, ReportScheduleRequest,
+    acknowledge, create_schedule, create_subscription, delivery_posture,
+    ingest_event, outbox, run_due_reports, schedules, subscriptions,
+    verify_webhook_signature, webhook_timestamp_is_fresh,
+)
 from app.investigations import withdrawal_investigation
 from app.market_risk import analyze_market_range
 from app.marketing import (
@@ -120,7 +126,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.18.0"
+VERSION = "2.19.0"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -291,6 +297,11 @@ async def agent_chat_page(agent_domain: str):
 @app.get("/knowledge", include_in_schema=False)
 async def knowledge_workspace():
     return FileResponse(ROOT / "static" / "knowledge.html")
+
+
+@app.get("/delivery", include_in_schema=False)
+async def delivery_workspace():
+    return FileResponse(ROOT / "static" / "delivery.html")
 
 
 @app.get("/api/v0/agents")
@@ -1867,6 +1878,134 @@ async def observability_report(
                                    "exchange_required": sum(item["status"] == "exchange_required"
                                                             for item in contracts)},
             "secrets_exposed": False, "action_executed": False}
+
+
+@app.post("/api/v0/delivery/subscriptions", status_code=201)
+async def delivery_subscription_create(
+    request: NotificationSubscriptionRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("manage_xima_governance", role)
+    return {"version": VERSION,
+            "subscription": create_subscription(settings.evidence_db_path, request),
+            "action_executed": False}
+
+
+@app.get("/api/v0/delivery/subscriptions")
+async def delivery_subscription_list(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    limit: int = Query(default=100, ge=1, le=500),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    return {"version": VERSION, "tenant_id": tenant_id,
+            "items": subscriptions(settings.evidence_db_path, tenant_id, limit),
+            "action_executed": False}
+
+
+@app.post("/api/v0/events/webhook", status_code=201)
+async def delivery_event_webhook(
+    request: Request,
+    signature: str = Header(default="", alias="X-BitAgent-Event-Signature"),
+    timestamp: str = Header(default="", alias="X-BitAgent-Event-Timestamp"),
+):
+    secret = settings.bitagent_event_webhook_secret.get_secret_value()
+    if not secret:
+        raise HTTPException(status_code=503, detail={
+            "code": "event_webhook_not_configured", "action_executed": False})
+    body = await request.body()
+    if not webhook_timestamp_is_fresh(
+        timestamp, settings.bitagent_event_webhook_tolerance_seconds
+    ):
+        raise HTTPException(status_code=401, detail={
+            "code": "event_webhook_timestamp_invalid", "action_executed": False})
+    if not verify_webhook_signature(body, signature, secret, timestamp):
+        raise HTTPException(status_code=401, detail={
+            "code": "event_webhook_signature_invalid", "action_executed": False})
+    try:
+        event = EventIngressRequest.model_validate_json(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={
+            "code": "event_payload_invalid", "message": str(exc),
+            "action_executed": False}) from exc
+    status, result = ingest_event(settings.evidence_db_path, event)
+    if status == 409:
+        raise HTTPException(status_code=409, detail={**result, "action_executed": False})
+    return {"version": VERSION, "receipt": result, "action_executed": False}
+
+
+@app.get("/api/v0/delivery/outbox")
+async def delivery_outbox_list(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    limit: int = Query(default=100, ge=1, le=500),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    return {"version": VERSION, "tenant_id": tenant_id,
+            "items": outbox(settings.evidence_db_path, tenant_id, limit),
+            "external_message_sent": False, "action_executed": False}
+
+
+@app.post("/api/v0/delivery/outbox/{notification_id}/acknowledge")
+async def delivery_outbox_acknowledge(
+    notification_id: str,
+    tenant_id: str = Query(min_length=1, max_length=100),
+    actor: str = Query(min_length=2, max_length=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("manage_xima_governance", role)
+    status, result = acknowledge(
+        settings.evidence_db_path, tenant_id, notification_id, actor
+    )
+    if status != 200:
+        raise HTTPException(status_code=status, detail={**result, "action_executed": False})
+    return {"version": VERSION, "notification": result, "action_executed": False}
+
+
+@app.post("/api/v0/delivery/report-schedules", status_code=201)
+async def delivery_report_schedule_create(
+    request: ReportScheduleRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("manage_xima_governance", role)
+    return {"version": VERSION,
+            "schedule": create_schedule(settings.evidence_db_path, request),
+            "action_executed": False}
+
+
+@app.get("/api/v0/delivery/report-schedules")
+async def delivery_report_schedule_list(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    limit: int = Query(default=100, ge=1, le=500),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    return {"version": VERSION, "tenant_id": tenant_id,
+            "items": schedules(settings.evidence_db_path, tenant_id, limit),
+            "action_executed": False}
+
+
+@app.post("/api/v0/delivery/reports/run-due")
+async def delivery_reports_run_due(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("manage_xima_governance", role)
+    return {"version": VERSION, "tenant_id": tenant_id,
+            "runs": run_due_reports(settings.evidence_db_path, tenant_id),
+            "external_message_sent": False, "action_executed": False}
+
+
+@app.get("/api/v0/delivery/posture")
+async def delivery_readiness_posture(
+    tenant_id: str = Query(min_length=1, max_length=100),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_audit", role)
+    return {"version": VERSION, **delivery_posture(
+        settings.evidence_db_path, tenant_id,
+        bool(settings.bitagent_event_webhook_secret.get_secret_value())),
+        "action_executed": False}
 
 
 @app.get("/api/v0/releases/candidate")

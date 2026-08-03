@@ -47,13 +47,15 @@ def mock_mode(monkeypatch, tmp_path):
         str(tmp_path / "upstream-security-report.json"),
     )
     monkeypatch.setattr(settings, "bitagent_access_control_mode", "observe")
+    monkeypatch.setattr(settings, "bitagent_event_webhook_secret", SecretStr(""))
+    monkeypatch.setattr(settings, "bitagent_event_webhook_tolerance_seconds", 300)
     chat_rate_limiter.clear()
 
 
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.18.0"
+    assert response.json()["version"] == "2.19.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -66,7 +68,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.18.0' in response.text
+    assert '/static/app.js?v=2.19.0' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -104,7 +106,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=2.18.0-agents' in html
+    assert 'agent-chat.js?v=2.19.0-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -118,7 +120,20 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=2.18.0-knowledge' in html
+    assert 'knowledge.js?v=2.19.0-knowledge' in html
+
+
+def test_delivery_center_has_complete_dom_targets():
+    html = client.get("/delivery").text
+    script = client.get("/static/delivery.js").text
+    html_ids = set(re.findall(r'id="([^"]+)"', html))
+    script_ids = set(re.findall(r'delivery\("([^"]+)"\)', script))
+
+    assert client.get("/delivery").status_code == 200
+    assert not sorted(script_ids - html_ids)
+    assert "SECURE EVENT AND REPORT DELIVERY" in html
+    assert 'delivery.js?v=2.19.0-delivery' in html
+    assert 'href="/delivery"' in client.get("/").text
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -284,7 +299,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.18.0' in page.text
+    assert 'exchange-api-test.js?v=2.19.0' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -506,7 +521,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.18.0"
+    assert body["version"] == "2.19.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -640,7 +655,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.18.0",
+        "version": "2.19.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1173,7 +1188,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.18.0"
+    assert report["version"] == "2.19.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1268,7 +1283,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.18.0"
+    assert manifest["current_version"] == "2.19.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -3178,3 +3193,129 @@ def test_xima_agent_outputs_are_tenant_scoped_hash_audited_and_metadata_only():
     assert other_feed == []
     assert verification["valid"] is True
     assert verification["records"] == 1
+
+
+def test_signed_event_delivery_is_idempotent_filtered_and_acknowledged(monkeypatch):
+    secret = "delivery-test-secret"
+    monkeypatch.setattr(settings, "bitagent_event_webhook_secret", SecretStr(secret))
+    created = client.post(
+        "/api/v0/delivery/subscriptions",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "tenant_id": "exchange-a", "domain": "operations",
+            "event_type": "service_degraded", "minimum_severity": "high",
+            "channel": "on_call", "destination_ref": "on-call:primary",
+            "owner": "operations",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["subscription"]["external_message_sent"] is False
+
+    event = {
+        "tenant_id": "exchange-a", "event_id": "evt-001",
+        "source_id": "operations-monitor", "domain": "operations",
+        "event_type": "service_degraded", "severity": "critical",
+        "occurred_at": datetime.now(UTC).isoformat(),
+        "evidence_refs": ["incident:42"], "payload": {"service": "ledger"},
+    }
+    raw = json.dumps(event, separators=(",", ":")).encode()
+    timestamp = str(int(datetime.now(UTC).timestamp()))
+    signature = hmac.new(
+        secret.encode(), timestamp.encode() + b"." + raw, hashlib.sha256
+    ).hexdigest()
+    headers = {
+        "Content-Type": "application/json",
+        "X-BitAgent-Event-Timestamp": timestamp,
+        "X-BitAgent-Event-Signature": signature,
+    }
+    ingested = client.post("/api/v0/events/webhook", headers=headers, content=raw)
+    duplicate = client.post("/api/v0/events/webhook", headers=headers, content=raw)
+
+    assert ingested.status_code == 201
+    assert ingested.json()["receipt"]["external_message_sent"] is False
+    assert len(ingested.json()["receipt"]["notifications"]) == 1
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["code"] == "event_duplicate"
+
+    items = client.get(
+        "/api/v0/delivery/outbox?tenant_id=exchange-a",
+        headers={"X-BitAgent-Role": "auditor"},
+    ).json()["items"]
+    assert len(items) == 1
+    assert client.get(
+        "/api/v0/delivery/outbox?tenant_id=exchange-b",
+        headers={"X-BitAgent-Role": "auditor"},
+    ).json()["items"] == []
+
+    path = f"/api/v0/delivery/outbox/{items[0]['notification_id']}/acknowledge"
+    acknowledged = client.post(
+        path + "?tenant_id=exchange-a&actor=operator-1",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+    repeated = client.post(
+        path + "?tenant_id=exchange-a&actor=operator-1",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+    assert acknowledged.status_code == 200
+    assert acknowledged.json()["notification"]["status"] == "acknowledged"
+    assert repeated.status_code == 409
+
+
+def test_event_webhook_fails_closed_for_configuration_signature_and_replay(monkeypatch):
+    raw = json.dumps({"tenant_id": "exchange-a"}, separators=(",", ":")).encode()
+    assert client.post("/api/v0/events/webhook", content=raw).status_code == 503
+
+    monkeypatch.setattr(settings, "bitagent_event_webhook_secret", SecretStr("secret"))
+    current = str(int(datetime.now(UTC).timestamp()))
+    wrong = client.post(
+        "/api/v0/events/webhook", content=raw,
+        headers={"X-BitAgent-Event-Timestamp": current,
+                 "X-BitAgent-Event-Signature": "0" * 64},
+    )
+    stale = str(int((datetime.now(UTC) - timedelta(minutes=10)).timestamp()))
+    stale_signature = hmac.new(
+        b"secret", stale.encode() + b"." + raw, hashlib.sha256
+    ).hexdigest()
+    replay = client.post(
+        "/api/v0/events/webhook", content=raw,
+        headers={"X-BitAgent-Event-Timestamp": stale,
+                 "X-BitAgent-Event-Signature": stale_signature},
+    )
+    assert wrong.status_code == 401
+    assert wrong.json()["detail"]["code"] == "event_webhook_signature_invalid"
+    assert replay.status_code == 401
+    assert replay.json()["detail"]["code"] == "event_webhook_timestamp_invalid"
+
+
+def test_scheduled_report_manifest_runs_once_until_next_interval(monkeypatch):
+    monkeypatch.setattr(settings, "bitagent_event_webhook_secret", SecretStr("configured"))
+    due = datetime.now(UTC) - timedelta(minutes=1)
+    created = client.post(
+        "/api/v0/delivery/report-schedules",
+        headers={"X-BitAgent-Role": "admin"},
+        json={
+            "tenant_id": "exchange-a", "report_type": "executive",
+            "interval_minutes": 60, "next_run_at": due.isoformat(),
+            "recipient_refs": ["leadership:daily"], "owner": "operations",
+        },
+    )
+    first = client.post(
+        "/api/v0/delivery/reports/run-due?tenant_id=exchange-a",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+    second = client.post(
+        "/api/v0/delivery/reports/run-due?tenant_id=exchange-a",
+        headers={"X-BitAgent-Role": "admin"},
+    )
+    posture = client.get(
+        "/api/v0/delivery/posture?tenant_id=exchange-a",
+        headers={"X-BitAgent-Role": "auditor"},
+    ).json()
+
+    assert created.status_code == 201
+    assert len(first.json()["runs"]) == 1
+    assert first.json()["runs"][0]["external_message_sent"] is False
+    assert second.json()["runs"] == []
+    assert posture["ready"] is False
+    assert posture["counts"]["report_schedules"] == 1
+    assert posture["external_delivery_enabled"] is False

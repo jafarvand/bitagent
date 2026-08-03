@@ -1,7 +1,7 @@
 # XIMA Completion Matrix
 
 Assessment date: 2026-08-02
-Software release: `2.18.0`
+Software release: `2.19.0`
 Authority: `docs/planning/project-plan.md`
 
 This matrix separates repository-complete capabilities from exchange-side and
@@ -16,7 +16,7 @@ owner exercise, or steering approval exists.
 | Data/integration layer | XIMA evidence contracts, lineage, quality, freshness, replay, source health, resilient GET gateway, exchange API 0.8 contract parity | Complete | Working production credential, remaining E1–E7 roadmap APIs/events, SLAs and owner evidence |
 | Operations intelligence | Service/dependency/error/latency/capacity, queue/worker, incidents, dedupe, runbook | Complete | Live operations sources and owner-labeled incident outcomes |
 | Market/risk intelligence | Spread, depth, volatility, abnormal activity, exposure, concentration, limit breaches | Complete | Order books, trades/candles, exposure/limit feeds and independent owner fixtures |
-| Executive intelligence | Required-domain coverage, priorities, owners, KPIs, evidence and next actions | Complete | Scheduled live reports and executive-owner acceptance |
+| Executive intelligence | Required-domain coverage, priorities, owners, KPIs, evidence, next actions, and scheduled local report manifests | Complete | Approved external delivery connector and executive-owner acceptance |
 | Treasury/reconciliation | Assets/liabilities, coverage, wallets, obligations, reconciliation/tolerance, brief; live 0.8 adapters | Complete | Credential repair, production treasury verification, reconciliation owner thresholds and independent financial validation |
 | AML/fraud | Transparent scoring, linked patterns, evidence packs, notes, feedback, queue brief | Complete | Minimized AML sources, labeled outcomes and compliance acceptance |
 | Security | Auth/admin/IAM/WAF/host/app correlation, privilege checks, narrative, escalation, brief | Complete | Security feeds, incident labels and red-team/security-owner acceptance |
@@ -42,7 +42,7 @@ owner exercise, or steering approval exists.
 ## Current production decision
 
 The repository is software-complete for the versioned XIMA plan through
-`2.18.0`, but it is **not approved for a production-controlled-action launch**.
+`2.19.0`, but it is **not approved for a production-controlled-action launch**.
 The next concrete exchange dependency is restoring the staging matching-engine
 balance, trade-history, and market services, followed by the remaining E1–E8
 delivery and evidence package described in

@@ -314,4 +314,11 @@ FEATURES = [
         "source": "GET /api/v0/xima/integrations/exchange/health",
         "description": "Bounded retry/backoff, circuit breaking and credential-free source telemetry.",
     },
+    {
+        "id": "xima-secure-event-delivery",
+        "name": "XIMA secure event and report delivery",
+        "status": "available",
+        "source": "/api/v0/delivery/*",
+        "description": "Timestamped HMAC webhooks, idempotent event receipts, severity routing, durable notification outbox, acknowledgements, and scheduled report manifests.",
+    },
 ]

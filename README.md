@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.18.0 — Production Identity and Observability Controls**
+Current release: **2.19.0 — Secure Event and Report Delivery**
 
 ## What the current release provides
 
@@ -18,6 +18,7 @@ Current release: **2.18.0 — Production Identity and Observability Controls**
 - Feature/API coverage matrix and explicit remaining queue, worker, network, order-book, and production-evidence gaps
 - Mock mode for safe local evaluation
 - Live mode using the exchange's current HMAC protocol
+- Timestamped signed-event ingestion, tenant routing, durable notification outbox, acknowledgements, and scheduled report manifests
 
 No trade, transfer, withdrawal, balance, user, or configuration write action exists.
 
@@ -35,6 +36,7 @@ The direct read-only exchange API console is at
 <http://localhost:8999/exchange-api-test>.
 The eight domain chat workspaces are available from <http://localhost:8999/agents>.
 The governed exchange policy and rules wizard is at <http://localhost:8999/knowledge>.
+The event, notification, and scheduled-report workspace is at <http://localhost:8999/delivery>.
 
 Exchange-team staging results and required actions are recorded in
 [`docs/integration/exchange-api-0.8-staging-test-report.md`](docs/integration/exchange-api-0.8-staging-test-report.md).
@@ -218,7 +220,8 @@ answers score zero and are never omitted from the overall result.
 | 2.15.0 | Dependency topology, queue/worker/network contracts, capacity correlation, and fail-closed root-cause hypotheses | Complete |
 | 2.16.0 | Ticker, sequenced book, trade/candle quality, depth bands, divergence, exposure valuation, concentration, and limit utilization | Complete |
 | 2.17.0 | AML outcome controls, security integrity and privileged context, support outcome evaluation, and nine explicit upstream contracts | Complete |
-| 2.18.0 | OIDC signature/issuer/audience/MFA/role/tenant enforcement, access reviews, identity readiness, and credential-free observability | Current |
+| 2.18.0 | OIDC signature/issuer/audience/MFA/role/tenant enforcement, access reviews, identity readiness, and credential-free observability | Complete |
+| 2.19.0 | Timestamped signed events, idempotent routing, durable outbox, acknowledgements, report schedules, and delivery posture | Current |
 
 ## Project documents
 

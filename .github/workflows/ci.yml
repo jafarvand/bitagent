@@ -39,10 +39,12 @@ jobs:
       - name: Verify deployed UI assets and API
         run: |
           curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'id="freshness-summary"'
-          curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'app.js?v=2.18.0'
+          curl --fail --silent http://127.0.0.1:8999/ | grep --quiet 'app.js?v=2.19.0'
           curl --fail --silent http://127.0.0.1:8999/api/v0/agents | grep --quiet 'market-risk'
-          curl --fail --silent http://127.0.0.1:8999/agents/operations | grep --quiet 'agent-chat.js?v=2.18.0-agents'
-          curl --fail --silent http://127.0.0.1:8999/knowledge | grep --quiet 'knowledge.js?v=2.18.0-knowledge'
+          curl --fail --silent http://127.0.0.1:8999/agents/operations | grep --quiet 'agent-chat.js?v=2.19.0-agents'
+          curl --fail --silent http://127.0.0.1:8999/knowledge | grep --quiet 'knowledge.js?v=2.19.0-knowledge'
+          curl --fail --silent http://127.0.0.1:8999/delivery | grep --quiet 'delivery.js?v=2.19.0-delivery'
+          curl --fail --silent -H 'X-BitAgent-Role: auditor' 'http://127.0.0.1:8999/api/v0/delivery/posture?tenant_id=ci-exchange' | grep --quiet 'external_delivery_enabled'
           curl --fail --silent http://127.0.0.1:8999/api/v0/xima/agents/operations/source-contract | grep --quiet 'exchange_required'
           curl --fail --silent http://127.0.0.1:8999/api/v0/xima/agents/market-risk/source-contract | grep --quiet 'order-book'
           curl --fail --silent http://127.0.0.1:8999/api/v0/xima/domain-sources | grep --quiet 'privileged-activity'

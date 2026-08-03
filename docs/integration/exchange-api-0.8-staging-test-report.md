@@ -1,8 +1,8 @@
 # Exchange API 0.8 staging integration report
 
 Prepared for: Exchange engineering, platform, matching-engine, treasury, and security teams  
-Test date: 2026-08-02 UTC  
-bitAgent release: `2.18.0`
+Test date: 2026-08-03 UTC
+bitAgent release: `2.19.0`
 Exchange contract: `0.8.0-pilot`  
 Environment: isolated synthetic staging
 
