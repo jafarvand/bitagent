@@ -175,7 +175,7 @@ def build_pilot_manifest(
     blockers = [gate for gate in gates if gate["status"] != "pass"]
     approved = not blockers
     receipt_material = {
-        "candidate_version": "3.0.0-rc.1", "current_version": current_version,
+        "candidate_version": "3.0.0-rc.2", "current_version": current_version,
         "tenant_id": tenant_id, "gates": gates,
         "external_evidence_sha256": pilot_evidence.get("sha256"),
     }
@@ -183,7 +183,7 @@ def build_pilot_manifest(
         receipt_material, sort_keys=True, separators=(",", ":")
     ).encode()).hexdigest()
     return {
-        "candidate_version": "3.0.0-rc.1", "current_version": current_version,
+        "candidate_version": "3.0.0-rc.2", "current_version": current_version,
         "tenant_id": tenant_id, "generated_at": now.isoformat(),
         "decision": "eligible_for_read_only_pilot_review" if approved else "blocked",
         "approved": approved, "passed": len(gates) - len(blockers),

@@ -1,4 +1,5 @@
 const el = id => document.getElementById(id);
+const uiLanguage = () => window.bitAgentI18n?.language || "en";
 let activeAgent = null;
 let sessionId = crypto.randomUUID();
 
@@ -29,7 +30,7 @@ function renderAgent(agent, agents) {
 }
 
 async function loadAgents() {
-  const response = await fetch("/api/v0/agents", {headers: {"X-BitAgent-Role": "operator"}});
+  const response = await fetch(`/api/v0/agents?language=${uiLanguage()}`, {headers: {"X-BitAgent-Role": "operator"}});
   const payload = await response.json();
   if (!response.ok) throw new Error(`Agent catalog failed (${response.status})`);
   const agentId = selectedAgentId(payload.agents);
@@ -46,7 +47,7 @@ el("agent-form").addEventListener("submit", async event => {
   el("agent-send").disabled = true;
   el("agent-state").textContent = "thinking";
   try {
-    const response = await fetch("/api/v0/chat", {method: "POST", headers: {"Content-Type": "application/json", "X-BitAgent-Role": "operator"}, body: JSON.stringify({question, session_id: sessionId, agent: activeAgent.id})});
+    const response = await fetch("/api/v0/chat", {method: "POST", headers: {"Content-Type": "application/json", "X-BitAgent-Role": "operator"}, body: JSON.stringify({question, session_id: sessionId, agent: activeAgent.id, language: uiLanguage()})});
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail?.message || payload.detail?.code || `Chat failed (${response.status})`);
     addMessage("assistant", payload.answer);

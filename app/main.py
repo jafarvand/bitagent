@@ -20,6 +20,7 @@ from app.chat import (
     answer_quality,
     citations,
     deterministic_answer,
+    localize_deterministic_answer,
     detects_prompt_injection,
     chat_rate_limiter,
     is_prohibited,
@@ -126,7 +127,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "3.0.0-rc.1"
+VERSION = "3.0.0-rc.2"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -170,6 +171,40 @@ AGENT_CHAT_DEFINITIONS = {
     "governance": {
         "name": "Governance Agent", "description": "Policy, auditability, readiness gates, prohibited actions, and evidence quality.",
         "samples": ["Which capability gaps remain?", "What does the audit chain prove?", "Can bitAgent execute a withdrawal or change a balance?"],
+    },
+}
+AGENT_CHAT_DEFINITIONS_FA = {
+    "operations": {
+        "name": "عامل عملیات", "description": "سلامت صرافی، جریان تراکنش، صف‌های معوق، رخدادها و راهنماهای عملیاتی.",
+        "samples": ["چند برداشت در انتظار است؟", "در روند برداشت‌های نگهداری‌شده چه تغییری رخ داده است؟", "علت ریشه‌ای فعلی با چه محدودیت شواهدی روبه‌رو است؟"],
+    },
+    "market-risk": {
+        "name": "عامل بازار و ریسک", "description": "تصویر بازار، کیفیت دامنه، محدودیت‌های نقدشوندگی و شواهد ریسک.",
+        "samples": ["ریسک فعلی دامنه بازار چیست؟", "آیا آخرین تصویر بازار کامل است؟", "کدام شواهد نقدشوندگی هنوز موجود نیست؟"],
+    },
+    "treasury": {
+        "name": "عامل خزانه‌داری", "description": "دارایی‌ها، بدهی‌ها، کیفیت نگه‌داری، پوشش و مرزهای تطبیق.",
+        "samples": ["چه شواهد خزانه‌داری اکنون موجود است؟", "آیا دارایی‌ها و بدهی‌ها کاملاً تطبیق داده شده‌اند؟", "چه چیزی مانع نتیجه‌گیری اثبات ذخایر است؟"],
+    },
+    "aml-fraud": {
+        "name": "عامل مبارزه با پول‌شویی و تقلب", "description": "شواهد حاکمیتی پرونده، عوامل ریسک، صف‌ها و بازبینی الزامی انسانی.",
+        "samples": ["چه شواهد مبارزه با پول‌شویی در دسترس است؟", "آیا شواهد فعلی نتیجه تقلب را پشتیبانی می‌کند؟", "کدام تصمیم‌ها به بازبینی انسانی نیاز دارند؟"],
+    },
+    "security": {
+        "name": "عامل امنیت", "description": "احراز هویت، فعالیت ممتاز، رخدادهای امنیتی و مرزهای دسترسی.",
+        "samples": ["آیا زنجیره شواهد نگهداری‌شده معتبر است؟", "چه تله‌متری امنیتی هنوز مفقود است؟", "آیا این عامل می‌تواند کلید یا راز API را افشا کند؟"],
+    },
+    "support": {
+        "name": "عامل پشتیبانی", "description": "توضیح امن شواهد، ارجاع، دانش حاکمیتی و مرزهای اطلاعات شخصی.",
+        "samples": ["هشدار برداشت را برای اپراتور پشتیبانی توضیح بده.", "بدون افشای داده خصوصی چه چیزی می‌توانم به مشتری بگویم؟", "چه زمانی این موضوع باید ارجاع داده شود؟"],
+    },
+    "executive": {
+        "name": "عامل مدیریت", "description": "اولویت‌های میان‌حوزه‌ای، آمادگی، اطمینان، محدودیت‌ها و اقدامات مالکان.",
+        "samples": ["خلاصه مدیریتی فعلی را ارائه کن.", "مهم‌ترین اولویت‌های امروز چیست؟", "آیا سامانه برای راه‌اندازی بدون محدودیت آماده است؟"],
+    },
+    "governance": {
+        "name": "عامل حاکمیت", "description": "سیاست، قابلیت ممیزی، دروازه‌های آمادگی، اقدامات ممنوع و کیفیت شواهد.",
+        "samples": ["کدام شکاف‌های قابلیت باقی مانده‌اند؟", "زنجیره ممیزی چه چیزی را اثبات می‌کند؟", "آیا bitAgent می‌تواند برداشت اجرا کند یا موجودی را تغییر دهد؟"],
     },
 }
 OPERATIONS_SOURCE_CONTRACT = [
@@ -311,14 +346,16 @@ async def pilot_readiness_workspace():
 
 @app.get("/api/v0/agents")
 async def agent_chat_catalog(
+    language: Literal["en", "fa"] = Query(default="en"),
     role: str | None = Header(default=None, alias="X-BitAgent-Role"),
 ):
     authorize("view_features", role)
+    definitions = AGENT_CHAT_DEFINITIONS_FA if language == "fa" else AGENT_CHAT_DEFINITIONS
     return {
         "version": VERSION,
         "agents": [
             {"id": agent_id, **definition, "path": f"/agents/{agent_id}"}
-            for agent_id, definition in AGENT_CHAT_DEFINITIONS.items()
+            for agent_id, definition in definitions.items()
         ],
         "count": len(AGENT_CHAT_DEFINITIONS),
         "action_executed": False,
@@ -1408,6 +1445,7 @@ class ChatRequest(BaseModel):
         "operations", "market-risk", "treasury", "aml-fraud",
         "security", "support", "executive", "governance",
     ] = "operations"
+    language: Literal["en", "fa"] = "en"
 
     @field_validator("question")
     @classmethod
@@ -1446,6 +1484,7 @@ async def readonly_chat(
             },
         )
     question = redact(request.question.strip())
+    language = request.language
     context = build_chat_context(
         settings.evidence_db_path,
         trend_limit=30,
@@ -1460,6 +1499,8 @@ async def readonly_chat(
     evidence_record_id = context["evidence_record"]["id"]
     if detects_prompt_injection(question):
         answer = (
+            "نمی‌توانم دستورهایی را دنبال کنم که برای دورزدن سیاست‌ها یا افشای پیام‌های پنهان تلاش می‌کنند. به‌جای آن یک پرسش مستقیم درباره شواهد نگهداری‌شده بپرسید. هیچ اقدامی توسط bitAgent اجرا نشد."
+            if language == "fa" else
             "I cannot follow instructions that attempt to override policy or reveal "
             "hidden prompts. Ask a direct question about retained evidence instead. "
             "No action executed by bitAgent."
@@ -1482,6 +1523,7 @@ async def readonly_chat(
             "version": VERSION,
             "agent": agent_domain,
             "session_id": session_id,
+            "language": language,
             "answer_type": "safety_refusal",
             "category": "safety",
             "answer": answer,
@@ -1498,6 +1540,8 @@ async def readonly_chat(
 
     if is_prohibited(question):
         answer = (
+            "نمی‌توانم عملیات نوشتنی صرافی را انجام دهم یا در اجرای آن کمک کنم. فقط می‌توانم شواهد خواندنی نگهداری‌شده را توضیح دهم و بررسی انسانی پیشنهاد کنم. هیچ اقدامی توسط bitAgent اجرا نشد."
+            if language == "fa" else
             "I cannot perform or assist with exchange write actions. I can only "
             "explain retained read-only evidence and suggest human investigation. "
             "No action executed by bitAgent."
@@ -1520,6 +1564,7 @@ async def readonly_chat(
             "version": VERSION,
             "agent": agent_domain,
             "session_id": session_id,
+            "language": language,
             "answer_type": "policy_refusal",
             "category": "safety",
             "answer": answer,
@@ -1535,9 +1580,9 @@ async def readonly_chat(
 
     deterministic = deterministic_answer(question, context)
     if deterministic:
-        answer = (
-            f"{deterministic['answer']}\n\nNo action executed by bitAgent."
-        )
+        localized = localize_deterministic_answer(deterministic, context, language)
+        suffix = "هیچ اقدامی توسط bitAgent اجرا نشد." if language == "fa" else "No action executed by bitAgent."
+        answer = f"{localized}\n\n{suffix}"
         model = "deterministic-evidence-v1"
         evidence_citations = citations(context)
         quality = answer_quality(answer, evidence_citations)
@@ -1556,6 +1601,7 @@ async def readonly_chat(
             "version": VERSION,
             "agent": agent_domain,
             "session_id": session_id,
+            "language": language,
             "answer_type": "deterministic",
             "category": intent_category(deterministic["intent"]),
             "answer": answer,
@@ -1577,6 +1623,7 @@ async def readonly_chat(
                 context,
                 max_context_chars=settings.chat_context_max_chars,
                 agent_domain=agent_domain,
+                language=language,
             )
         )
     except OllamaError as exc:
@@ -1598,8 +1645,9 @@ async def readonly_chat(
         ) from exc
 
     answer = redact(generated["answer"])
-    if "No action executed by bitAgent." not in answer:
-        answer = f"{answer}\n\nNo action executed by bitAgent."
+    required_suffix = "هیچ اقدامی توسط bitAgent اجرا نشد." if language == "fa" else "No action executed by bitAgent."
+    if required_suffix not in answer:
+        answer = f"{answer}\n\n{required_suffix}"
     evidence_citations = citations(context)
     quality = answer_quality(answer, evidence_citations)
     if not quality["passed"]:
@@ -1622,6 +1670,7 @@ async def readonly_chat(
         "version": VERSION,
         "agent": agent_domain,
         "session_id": session_id,
+        "language": language,
         "answer_type": "llm",
         "category": "open_ended",
         "answer": answer,

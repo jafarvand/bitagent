@@ -1,0 +1,47 @@
+(() => {
+  const STORAGE_KEY = "bitagent-language";
+  const supported = new Set(["en", "fa"]);
+  const saved = localStorage.getItem(STORAGE_KEY);
+  const preferred = navigator.language?.toLowerCase().startsWith("fa") ? "fa" : "en";
+  const language = supported.has(saved) ? saved : preferred;
+  const fa = {
+    "Refresh live data":"تازه‌سازی داده زنده","Agent chats":"گفت‌وگو با عامل‌ها","Knowledge base":"پایگاه دانش","Delivery center":"مرکز تحویل","Pilot gates":"دروازه‌های پایلوت","Exchange API tests":"آزمون API صرافی","READ-ONLY PILOT":"پایلوت فقط‌خواندنی",
+    "connecting":"در حال اتصال","Loading":"در حال بارگذاری","data connection":"اتصال داده","Prove every pass.":"هر موفقیت را اثبات کنید.","Expose every gap.":"هر شکاف را آشکار کنید.","Golden-case replay":"بازپخش موارد معیار","Security self-test":"خودآزمایی امنیت","UAT decision":"تصمیم پذیرش کاربر",
+    "MARKET RANGE ANALYTICS":"تحلیل دامنه بازار","HISTORICAL COMPARISON":"مقایسه تاریخی","EVIDENCE-BACKED INVESTIGATION":"بررسی مبتنی بر شواهد","EXECUTIVE BRIEF":"خلاصه مدیریتی","FEATURE COVERAGE":"پوشش قابلیت‌ها","READ-ONLY EVIDENCE CHAT":"گفت‌وگوی فقط‌خواندنی مبتنی بر شواهد",
+    "High-low range":"دامنه سقف تا کف","Last-price position":"موقعیت آخرین قیمت","Confidence":"اطمینان","Pending withdrawals Δ":"تغییر برداشت‌های معلق","Orders Δ":"تغییر سفارش‌ها","Last price Δ":"تغییر آخرین قیمت","SUPPORTING EVIDENCE":"شواهد پشتیبان","CITED RUNBOOK":"راهنمای عملیاتی ارجاع‌شده","NO ACTION EXECUTED":"هیچ اقدامی اجرا نشد",
+    "Orders":"سفارش‌ها","Deposits":"واریزها","Withdrawals":"برداشت‌ها","Pending withdrawals":"برداشت‌های معلق","Active":"فعال","Inactive":"غیرفعال","Data incomplete":"داده ناقص","Unavailable":"ناموجود","Open":"بازشدن","High":"بیشینه","Low":"کمینه","Volume":"حجم",
+    "Refresh":"تازه‌سازی","Updated":"به‌روزرسانی شد","Live API":"API زنده","Safe preview":"پیش‌نمایش امن","Data unavailable":"داده در دسترس نیست","Refreshing":"در حال تازه‌سازی","Refresh posture":"تازه‌سازی وضعیت","Waiting":"در انتظار","Blocked":"مسدود","Ready":"آماده","enabled":"فعال","disabled":"غیرفعال","available":"موجود","partial":"ناقص","missing":"مفقود","healthy":"سالم","warning":"هشدار","critical":"بحرانی","unknown":"نامشخص","read only":"فقط‌خواندنی","thinking":"در حال فکر","unavailable":"ناموجود",
+    "GOVERNED EXCHANGE KNOWLEDGE":"دانش حاکمیتی صرافی","Policy training wizard":"راهنمای آموزش سیاست‌ها","1. Document":"۱. سند","2. Governance":"۲. حاکمیت","3. Process":"۳. پردازش","4. Test Q&A":"۴. آزمون پرسش‌وپاسخ","DOCUMENT WIZARD":"راهنمای سند","Import and govern":"ورود و اعمال حاکمیت","Document upload":"بارگذاری سند","Tenant":"مستأجر","Document ID":"شناسه سند","Title":"عنوان","Type":"نوع","Version":"نسخه","Owner":"مالک","Status":"وضعیت","Approved by role":"تأیید توسط نقش","Data class":"رده داده","Allowed roles":"نقش‌های مجاز","Effective date":"تاریخ اجرا","Expiry date":"تاریخ انقضا","Keywords":"کلیدواژه‌ها","Source reference":"مرجع منبع","Content":"محتوا","Process document":"پردازش سند","PROCESSING RESULT":"نتیجه پردازش","Governance receipt":"رسید حاکمیت","Safety boundary":"مرز ایمنی","DOCUMENT INVENTORY":"فهرست اسناد","Versions and lifecycle":"نسخه‌ها و چرخه عمر","Test document Q&A":"آزمون پرسش‌وپاسخ سند","Question":"پرسش","Test answer":"آزمون پاسخ","RETRIEVAL EVALUATION":"ارزیابی بازیابی","Expected document IDs":"شناسه اسناد مورد انتظار","Run evaluation":"اجرای ارزیابی","Supersede":"جایگزین کردن",
+    "SECURE EVENT AND REPORT DELIVERY":"تحویل امن رویداد و گزارش","Route evidence.":"شواهد را مسیریابی کنید.","Prove receipt.":"دریافت را اثبات کنید.","delivery posture":"وضعیت تحویل","Webhook authentication":"احراز هویت وب‌هوک","Active subscriptions":"اشتراک‌های فعال","Queued notifications":"اعلان‌های در صف","ROUTING RULE":"قاعده مسیریابی","Create subscription":"ایجاد اشتراک","Domain":"حوزه","Event type":"نوع رویداد","Minimum severity":"حداقل شدت","Channel":"کانال","Destination reference":"مرجع مقصد","REPORT MANIFEST":"مانیفست گزارش","Schedule report":"زمان‌بندی گزارش","Report type":"نوع گزارش","Interval minutes":"فاصله به دقیقه","First run":"اولین اجرا","Recipient references":"مراجع گیرنده","Create schedule":"ایجاد زمان‌بندی","DURABLE OUTBOX":"صندوق خروجی پایدار","Notifications and acknowledgement":"اعلان‌ها و تأیید دریافت","Acknowledge":"تأیید دریافت","local only":"فقط محلی","admin":"مدیر",
+    "READ-ONLY PILOT RELEASE CANDIDATE":"نامزد انتشار پایلوت فقط‌خواندنی","Evidence first.":"ابتدا شواهد.","Approval last.":"در پایان تأیید.","pilot decision":"تصمیم پایلوت","Evaluate gates":"ارزیابی دروازه‌ها","Export report":"خروجی گزارش","Passed gates":"دروازه‌های موفق","Blocking gates":"دروازه‌های مسدودکننده","Controlled actions":"اقدامات کنترل‌شده","GATE EVIDENCE":"شواهد دروازه","Production eligibility controls":"کنترل‌های صلاحیت تولید","EXTERNAL EVIDENCE PACKAGE":"بسته شواهد بیرونی","Validated input status":"وضعیت ورودی اعتبارسنجی‌شده","pass":"موفق","pending":"در انتظار","blocked":"مسدود",
+    "EXCHANGE API DIRECT TESTS":"آزمون مستقیم API صرافی","Direct signed read checks":"بررسی مستقیم امضاشده فقط‌خواندنی","Run all tests":"اجرای همه آزمون‌ها","Market":"بازار","User ID":"شناسه کاربر","Limit":"حد","Run":"اجرا","Passed":"موفق","Failed":"ناموفق","Platform":"سکو","Operations":"عملیات","Treasury":"خزانه‌داری","User":"کاربر",
+    "AGENT WORKSPACES":"فضاهای کاری عامل‌ها","SAMPLE QUESTIONS":"پرسش‌های نمونه","Ask the agent":"از عامل بپرسید","Send":"ارسال","EVIDENCE BOUNDARY":"مرز شواهد","Operations Agent":"عامل عملیات","Market & Risk Agent":"عامل بازار و ریسک","Treasury Agent":"عامل خزانه‌داری","AML & Fraud Agent":"عامل مبارزه با پول‌شویی و تقلب","Security Agent":"عامل امنیت","Support Agent":"عامل پشتیبانی","Executive Agent":"عامل مدیریت","Governance Agent":"عامل حاکمیت",
+    "How many withdrawals are pending?":"چند برداشت در انتظار است؟","What changed in the retained withdrawal trend?":"در روند برداشت‌های نگهداری‌شده چه تغییری رخ داده است؟","What evidence limits the current root-cause conclusion?":"چه شواهدی نتیجه‌گیری علت ریشه‌ای فعلی را محدود می‌کند؟","What is the current market-range risk?":"ریسک فعلی دامنه بازار چیست؟","Is the latest market snapshot complete?":"آیا آخرین تصویر بازار کامل است؟","What liquidity evidence is still unavailable?":"کدام شواهد نقدشوندگی هنوز موجود نیست؟","Give me the current executive brief.":"خلاصه مدیریتی فعلی را ارائه کن.","What are today's highest priorities?":"مهم‌ترین اولویت‌های امروز چیست؟","Is the system ready for unrestricted go-live?":"آیا سامانه برای راه‌اندازی بدون محدودیت آماده است؟","Which capability gaps remain?":"کدام شکاف‌های قابلیت باقی مانده‌اند؟","What does the audit chain prove?":"زنجیره ممیزی چه چیزی را اثبات می‌کند؟","Can bitAgent execute a withdrawal or change a balance?":"آیا bitAgent می‌تواند برداشت اجرا کند یا موجودی را تغییر دهد؟"
+  };
+  const phraseRules = [
+    [/^VERSION (.+) · READ-ONLY PILOT RELEASE CANDIDATE$/, "نسخه $1 · نامزد انتشار پایلوت فقط‌خواندنی"],
+    [/^(\d+) item\(s\)$/, "$1 مورد"], [/^(\d+) version\(s\)$/, "$1 نسخه"],
+    [/^(\d+) citation\(s\)$/, "$1 ارجاع"], [/^of (\d+) required$/, "از $1 مورد الزامی"],
+    [/^Updated (.+)$/, "به‌روزرسانی: $1"], [/^(.+) mode$/, "حالت $1"],
+    [/^(.+) confidence$/, "اطمینان $1"], [/^audit (.+)$/, "ممیزی $1"]
+  ];
+  function t(value) {
+    if (language !== "fa" || typeof value !== "string") return value;
+    const trimmed=value.trim(); if(!trimmed) return value;
+    let translated=fa[trimmed];
+    if(!translated){for(const [pattern,replacement] of phraseRules){if(pattern.test(trimmed)){translated=trimmed.replace(pattern,replacement);break;}}}
+    if(!translated)return value;
+    return value.replace(trimmed,translated);
+  }
+  function translate(root=document.body) {
+    if(language!=="fa"||!root)return;
+    const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);const nodes=[];
+    while(walker.nextNode())nodes.push(walker.currentNode);
+    nodes.forEach(node=>{if(!node.parentElement?.closest("script,style,pre,code,[data-no-translate],.chat-message.user"))node.nodeValue=t(node.nodeValue);});
+    root.querySelectorAll?.("[placeholder],[title],[aria-label]").forEach(node=>["placeholder","title","aria-label"].forEach(attr=>{if(node.hasAttribute(attr))node.setAttribute(attr,t(node.getAttribute(attr)));}));
+  }
+  document.documentElement.lang=language;document.documentElement.dir=language==="fa"?"rtl":"ltr";
+  window.bitAgentI18n={language,t,translate};
+  const start=()=>{translate();const button=document.createElement("button");button.id="language-toggle";button.className="language-toggle";button.type="button";button.textContent=language==="fa"?"English":"فارسی";button.setAttribute("aria-label",language==="fa"?"Switch to English":"تغییر زبان به فارسی");button.addEventListener("click",()=>{localStorage.setItem(STORAGE_KEY,language==="fa"?"en":"fa");location.reload();});document.querySelector(".top-actions")?.prepend(button);new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>{if(node.nodeType===Node.TEXT_NODE&&node.parentElement)node.nodeValue=t(node.nodeValue);else if(node.nodeType===Node.ELEMENT_NODE)translate(node);}))).observe(document.body,{childList:true,subtree:true});};
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",start);else start();
+})();

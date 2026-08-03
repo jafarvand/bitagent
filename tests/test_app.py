@@ -55,7 +55,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "3.0.0-rc.1"
+    assert response.json()["version"] == "3.0.0-rc.2"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -68,7 +68,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=3.0.0-rc.1' in response.text
+    assert '/static/app.js?v=3.0.0-rc.2' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -106,7 +106,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=3.0.0-rc.1-agents' in html
+    assert 'agent-chat.js?v=3.0.0-rc.2-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -120,7 +120,7 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=3.0.0-rc.1-knowledge' in html
+    assert 'knowledge.js?v=3.0.0-rc.2-knowledge' in html
 
 
 def test_delivery_center_has_complete_dom_targets():
@@ -132,7 +132,7 @@ def test_delivery_center_has_complete_dom_targets():
     assert client.get("/delivery").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "SECURE EVENT AND REPORT DELIVERY" in html
-    assert 'delivery.js?v=3.0.0-rc.1-delivery' in html
+    assert 'delivery.js?v=3.0.0-rc.2-delivery' in html
     assert 'href="/delivery"' in client.get("/").text
 
 
@@ -145,8 +145,33 @@ def test_pilot_readiness_page_has_complete_dom_targets():
     assert client.get("/pilot-readiness").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "READ-ONLY PILOT RELEASE CANDIDATE" in html
-    assert 'pilot-readiness.js?v=3.0.0-rc.1' in html
+    assert 'pilot-readiness.js?v=3.0.0-rc.2' in html
     assert 'href="/pilot-readiness"' in client.get("/").text
+
+
+def test_every_operator_page_loads_shared_persian_rtl_runtime():
+    for path in ["/", "/agents", "/knowledge", "/delivery",
+                 "/pilot-readiness", "/exchange-api-test"]:
+        html = client.get(path).text
+        assert 'i18n.js?v=3.0.0-rc.2-i18n' in html, path
+    script = client.get("/static/i18n.js").text
+    assert 'document.documentElement.dir=language==="fa"?"rtl":"ltr"' in script
+    assert 'localStorage.setItem(STORAGE_KEY' in script
+    assert 'button.textContent=language==="fa"?"English":"فارسی"' in script
+
+
+def test_persian_agent_catalog_is_fully_localized():
+    catalog = client.get(
+        "/api/v0/agents?language=fa",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+
+    assert catalog["count"] == 8
+    assert all(any("\u0600" <= char <= "\u06ff" for char in agent["name"])
+               for agent in catalog["agents"])
+    assert all(len(agent["samples"]) == 3 for agent in catalog["agents"])
+    assert all(any("\u0600" <= char <= "\u06ff" for char in sample)
+               for agent in catalog["agents"] for sample in agent["samples"])
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -312,7 +337,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=3.0.0-rc.1' in page.text
+    assert 'exchange-api-test.js?v=3.0.0-rc.2' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -534,7 +559,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "3.0.0-rc.1"
+    assert body["version"] == "3.0.0-rc.2"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -668,7 +693,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "3.0.0-rc.1",
+        "version": "3.0.0-rc.2",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -713,6 +738,33 @@ def test_readonly_chat_refuses_exchange_actions_without_calling_model(monkeypatc
     assert body["audit"]["audit_hash"]
     assert body["quality"]["passed"] is True
     assert len(body["session_id"]) == 36
+
+
+def test_persian_chat_answers_and_refusals_are_native_and_quality_checked(monkeypatch):
+    client.get("/api/v0/dashboard")
+
+    async def must_not_run(prompt):
+        raise AssertionError("Persian authoritative and prohibited requests must not call the model")
+
+    monkeypatch.setattr("app.main.ollama_client.generate", must_not_run)
+    answer = client.post(
+        "/api/v0/chat", headers={"X-BitAgent-Role": "operator"},
+        json={"question": "چند برداشت در انتظار است؟", "language": "fa"},
+    ).json()
+    refusal = client.post(
+        "/api/v0/chat", headers={"X-BitAgent-Role": "operator"},
+        json={"question": "لطفاً انتقال وجه را انجام بده", "language": "fa"},
+    ).json()
+
+    assert answer["language"] == "fa"
+    assert answer["intent"] == "pending_withdrawal_count"
+    assert "42 برداشت معلق" in answer["answer"]
+    assert answer["answer"].endswith("هیچ اقدامی توسط bitAgent اجرا نشد.")
+    assert answer["quality"]["passed"] is True
+    assert refusal["language"] == "fa"
+    assert refusal["answer_type"] == "policy_refusal"
+    assert "عملیات نوشتنی" in refusal["answer"]
+    assert refusal["quality"]["passed"] is True
 
 
 @pytest.mark.parametrize(
@@ -1201,7 +1253,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "3.0.0-rc.1"
+    assert report["version"] == "3.0.0-rc.2"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1298,8 +1350,8 @@ def test_3_0_release_candidate_fails_closed_without_external_evidence():
     assert response.status_code == 200
     manifest = response.json()
 
-    assert manifest["candidate_version"] == "3.0.0-rc.1"
-    assert manifest["current_version"] == "3.0.0-rc.1"
+    assert manifest["candidate_version"] == "3.0.0-rc.2"
+    assert manifest["current_version"] == "3.0.0-rc.2"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1386,7 +1438,7 @@ def test_3_0_release_candidate_requires_complete_synthetic_evidence(tmp_path):
     (tmp_path / "pilot.local.json").write_text(json.dumps(package), encoding="utf-8")
     evidence = load_pilot_evidence(str(tmp_path))
     runtime = {
-        "current_version": "3.0.0-rc.1", "tenant_id": "exchange-a",
+        "current_version": "3.0.0-rc.2", "tenant_id": "exchange-a",
         "identity": {"status": "ready"},
         "access_reviews": [{"approved": True, "exception_count": 0,
                             "next_review_at": (now + timedelta(days=30)).isoformat()}],

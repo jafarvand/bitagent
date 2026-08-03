@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [3.0.0-rc.2] - 2026-08-03
+
+- Added a persistent English/Persian language switch and shared translation runtime to every operator page, with complete document-level `lang`/`dir` switching and RTL layout rules.
+- Added native Persian names, descriptions, and sample questions for all eight agents, plus Persian intent recognition and deterministic evidence answers.
+- Added Persian safety refusals and Persian-only LLM prompting while preserving technical identifiers, citations, audit receipts, and the read-only execution boundary.
+
 ## [3.0.0-rc.1] - 2026-08-03
 
 - Replaced the narrow legacy candidate decision with nine mandatory tenant gates spanning identity, access review, audit integrity, knowledge, delivery, all 14 exchange routes, all 20 domain sources, shadow reliability, and steering approval.

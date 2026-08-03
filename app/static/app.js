@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const uiLanguage = () => window.bitAgentI18n?.language || "en";
 const number = (value, maximumFractionDigits = 2) =>
   Number(value || 0).toLocaleString(undefined, {maximumFractionDigits});
 let currentBriefId = null;
@@ -45,7 +46,7 @@ async function askChat(event) {
         "Content-Type": "application/json",
         "X-BitAgent-Role": "operator"
       },
-      body: JSON.stringify({question})
+      body: JSON.stringify({question, language: uiLanguage()})
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
