@@ -21,6 +21,13 @@ FEATURES = [
         "description": "Validates books, tickers, trades and candles; measures depth bands, imbalance, gaps, divergence, exposure, concentration and governed limits.",
     },
     {
+        "id": "domain-connector-contracts",
+        "name": "AML, security and support connector contracts",
+        "status": "available",
+        "source": "GET /api/v0/xima/domain-sources",
+        "description": "Nine minimized upstream source contracts plus richer AML outcomes, security integrity and privileged controls, and support outcome evaluation.",
+    },
+    {
         "id": "readonly-chat",
         "name": "Read-only evidence chat",
         "status": "available",

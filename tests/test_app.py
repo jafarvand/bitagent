@@ -50,7 +50,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.16.0"
+    assert response.json()["version"] == "2.17.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -63,7 +63,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.16.0' in response.text
+    assert '/static/app.js?v=2.17.0' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -101,7 +101,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=2.16.0-agents' in html
+    assert 'agent-chat.js?v=2.17.0-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -115,7 +115,7 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=2.16.0-knowledge' in html
+    assert 'knowledge.js?v=2.17.0-knowledge' in html
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -281,7 +281,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.16.0' in page.text
+    assert 'exchange-api-test.js?v=2.17.0' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -503,7 +503,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.16.0"
+    assert body["version"] == "2.17.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -637,7 +637,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.16.0",
+        "version": "2.17.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1170,7 +1170,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.16.0"
+    assert report["version"] == "2.17.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1265,7 +1265,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.16.0"
+    assert manifest["current_version"] == "2.17.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -2461,6 +2461,68 @@ def test_xima_support_agent_redacts_classifies_escalates_and_cites_safe_draft():
     assert result["human_review_required"] is True
     assert result["send_enabled"] is False
     assert result["action_executed"] is False
+
+
+def test_domain_connector_contracts_outcomes_and_minimized_control_fields():
+    now = datetime.now(UTC).isoformat()
+    aml = client.post(
+        "/api/v0/xima/agents/aml-fraud/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "exchange-a", "observed_at": now,
+              "evidence_refs": ["aml-case-feed"], "owner": "compliance",
+              "evidence_fresh": True, "conflicting_fields": [], "cases": [{
+                  "case_id": "CASE-CLOSED", "status": "closed", "age_seconds": 100,
+                  "sla_seconds": 1000, "assigned_team": "financial-crime",
+                  "outcome_label": "false_positive", "missing_evidence": [],
+                  "factors": [{"factor": "velocity", "weight": 20, "triggered": True,
+                               "evidence_ref": "rule:velocity", "explanation": "Burst detected"}],
+              }]},
+    ).json()["analysis"]
+    security = client.post(
+        "/api/v0/xima/agents/security/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "exchange-a", "observed_at": now,
+              "evidence_refs": ["security-feed"], "owner": "security",
+              "evidence_fresh": True, "conflicting_fields": [], "events": [{
+                  "event_id": "SEC-100", "category": "admin", "action": "role-change",
+                  "outcome": "success", "source_severity": "high", "occurred_at": now,
+                  "opaque_actor_id": "actor-opaque", "target": "admin-role",
+                  "source_classification": "internal", "correlation_id": "corr-100",
+                  "privileged": True, "mfa_present": True,
+                  "authentication_strength": "hardware", "break_glass": True,
+                  "approval_ticket_ref": "CHG-100", "integrity_hash": "a" * 64,
+              }]},
+    ).json()["analysis"]
+    support = client.post(
+        "/api/v0/xima/agents/support/outcomes/evaluate",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "exchange-a", "outcomes": [
+            {"ticket_id": "TKT-1", "draft_outcome": "accepted",
+             "escalation_expected": True, "escalation_performed": True,
+             "response_seconds": 30, "resolution_seconds": 300, "csat_score": 5},
+            {"ticket_id": "TKT-2", "draft_outcome": "edited",
+             "escalation_expected": False, "escalation_performed": False,
+             "response_seconds": 60, "resolution_seconds": 600, "csat_score": 3},
+        ]},
+    ).json()["evaluation"]
+    contract = client.get(
+        "/api/v0/xima/domain-sources", headers={"X-BitAgent-Role": "operator"}
+    ).json()
+
+    assert aml["cases"][0]["human_decision_required"] is False
+    assert aml["queue_brief"]["next_case_id"] is None
+    assert aml["queue_brief"]["false_positive_count"] == 1
+    assert security["privileged_activity"][0]["authentication_strength"] == "hardware"
+    assert security["privileged_activity"][0]["integrity_hash_present"] is True
+    assert security["privileged_activity"][0]["review_required"] is True
+    assert support["draft_acceptance_rate"] == 0.5
+    assert support["escalation_accuracy"] == 1.0
+    assert support["average_csat"] == 4.0
+    assert support["audit"]["record_hash"]
+    assert contract["all_live"] is False
+    assert sum(len(items) for items in contract["domains"].values()) == 9
+    assert all(item["status"] == "exchange_required"
+               for items in contract["domains"].values() for item in items)
 
 
 def test_xima_cross_domain_policy_fails_closed_for_prohibited_cross_tenant_and_restricted_data():

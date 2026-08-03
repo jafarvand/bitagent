@@ -34,12 +34,15 @@ class TransactionRiskEvidence(BaseModel):
 
 class AMLCase(BaseModel):
     case_id: str = Field(min_length=3, max_length=100)
-    status: Literal["open", "in_review", "escalated"]
+    status: Literal["open", "in_review", "escalated", "closed"]
     age_seconds: int = Field(ge=0)
     sla_seconds: int = Field(gt=0)
     factors: list[RiskFactor] = Field(min_length=1, max_length=100)
     linked_patterns: list[LinkedPattern] = Field(default_factory=list, max_length=100)
     transactions: list[TransactionRiskEvidence] = Field(default_factory=list, max_length=500)
+    assigned_team: str | None = Field(default=None, max_length=100)
+    outcome_label: Literal["confirmed", "false_positive", "inconclusive"] | None = None
+    missing_evidence: list[str] = Field(default_factory=list, max_length=100)
 
 
 class AMLAnalysisRequest(BaseModel):
@@ -97,7 +100,10 @@ def analyze_aml(request: AMLAnalysisRequest) -> dict:
                 f"Case {case.case_id} has priority {priority} from {len(triggered)} "
                 "transparent factor(s). Review cited evidence; this is not a legal conclusion."
             ),
-            "human_decision_required": True,
+            "human_decision_required": case.status != "closed",
+            "assigned_team": case.assigned_team,
+            "outcome_label": case.outcome_label,
+            "missing_evidence": case.missing_evidence,
         })
     rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
     results.sort(key=lambda item: (rank[item["priority"]], item["score"]), reverse=True)
@@ -111,7 +117,11 @@ def analyze_aml(request: AMLAnalysisRequest) -> dict:
         "queue_brief": {
             "total": len(results), "counts": counts,
             "sla_breaches": sum(item["sla_breached"] for item in results),
-            "next_case_id": results[0]["case_id"],
+            "next_case_id": next((item["case_id"] for item in results
+                                  if item["status"] != "closed"), None),
+            "closed_outcome_count": sum(item["outcome_label"] is not None for item in results),
+            "false_positive_count": sum(item["outcome_label"] == "false_positive" for item in results),
+            "missing_evidence_case_count": sum(bool(item["missing_evidence"]) for item in results),
         },
         "limitations": ["Priority assists human review and is not a final AML or legal judgment."],
         "recommended_next_action": "Review cases in ranked order and record the authorized outcome.",

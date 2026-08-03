@@ -20,6 +20,10 @@ class SecurityEvent(BaseModel):
     mfa_present: bool = False
     approved_change_ref: str | None = Field(default=None, max_length=100)
     risk_indicators: list[str] = Field(default_factory=list, max_length=50)
+    authentication_strength: Literal["none", "password", "mfa", "hardware", "unknown"] = "unknown"
+    break_glass: bool = False
+    approval_ticket_ref: str | None = Field(default=None, max_length=100)
+    integrity_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class SecurityAnalysisRequest(BaseModel):
@@ -59,7 +63,8 @@ def analyze_security(request: SecurityAnalysisRequest) -> dict:
         indicators = sorted({indicator for event in events for indicator in event.risk_indicators})
         failure_count = sum(event.outcome == "failure" for event in events)
         privileged_unapproved = any(
-            event.privileged and event.outcome == "success" and not event.approved_change_ref
+            event.privileged and event.outcome == "success"
+            and not (event.approved_change_ref or event.approval_ticket_ref)
             for event in events
         )
         privileged_without_mfa = any(event.privileged and not event.mfa_present for event in events)
@@ -78,6 +83,8 @@ def analyze_security(request: SecurityAnalysisRequest) -> dict:
                 "risk_indicators": indicators,
                 "privileged_unapproved": privileged_unapproved,
                 "privileged_without_mfa": privileged_without_mfa,
+                "break_glass": any(event.break_glass for event in events),
+                "missing_integrity_hash_count": sum(event.integrity_hash is None for event in events),
                 "narrative": (
                     f"{len(events)} correlated event(s) across {', '.join(categories)} "
                     f"for {len(actors)} opaque actor(s); human investigation required."
@@ -92,8 +99,14 @@ def analyze_security(request: SecurityAnalysisRequest) -> dict:
             "action": event.action, "target": event.target, "outcome": event.outcome,
             "mfa_present": event.mfa_present,
             "approved_change_ref": event.approved_change_ref,
+            "approval_ticket_ref": event.approval_ticket_ref,
+            "authentication_strength": event.authentication_strength,
+            "break_glass": event.break_glass,
+            "integrity_hash_present": event.integrity_hash is not None,
             "occurred_at": event.occurred_at.isoformat(),
-            "review_required": not event.mfa_present or not event.approved_change_ref,
+            "review_required": (not event.mfa_present
+                                or not (event.approved_change_ref or event.approval_ticket_ref)
+                                or event.break_glass),
         }
         for event in request.events if event.privileged
     ]

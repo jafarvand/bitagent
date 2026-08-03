@@ -30,6 +30,7 @@ training, or steering approval as software features.
 | `2.14.0` | Governed knowledge management | Multi-format extraction, chunk hashes, duplicate controls, inventory, append-only lifecycle transitions, and retrieval evaluation | Complete |
 | `2.15.0` | Operations topology and root-cause intelligence | Dependency, queue, worker, capacity and network contracts with deterministic cross-source hypotheses | Complete |
 | `2.16.0` | Market and liquidity intelligence package | Ticker/book/trade/candle quality, depth bands, divergence, exposure valuation, concentration and governed limits | Complete |
+| `2.17.0` | Minimized domain connector contracts | AML outcomes, security integrity/privilege context, support evaluation, and nine explicit upstream contracts | Complete |
 
 ## Definition of software completion
 

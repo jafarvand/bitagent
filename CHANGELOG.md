@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.17.0] - 2026-08-02
+
+- Added nine minimized AML/fraud, security, support, outcome, and knowledge upstream connector contracts with explicit exchange-required status.
+- Added closed AML outcome and missing-evidence queue measurements, security authentication-strength/integrity/break-glass controls, and support channel/SLA context.
+- Added audited support outcome evaluation for draft acceptance, escalation accuracy, response/resolution time, and consented CSAT.
+
 ## [2.16.0] - 2026-08-02
 
 - Added normalized ticker, sequenced order-book, aggregate trade, candle, exposure-valuation, and governed market-limit evidence contracts.

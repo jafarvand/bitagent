@@ -98,9 +98,11 @@ from app.xima_aml import AMLAnalysisRequest, AMLFeedbackRequest, analyze_aml, re
 from app.xima_security import SecurityAnalysisRequest, analyze_security
 from app.xima_support import (
     KnowledgeDocumentRequest, KnowledgeEvaluationRequest, KnowledgeQuestionRequest,
-    KnowledgeStatusRequest, KnowledgeUploadRequest, SupportTicketRequest,
+    KnowledgeStatusRequest, KnowledgeUploadRequest, SupportOutcomeEvaluationRequest,
+    SupportTicketRequest,
     analyze_support, answer_knowledge_question, change_knowledge_status,
-    evaluate_knowledge, extract_document_text, ingest_knowledge, list_knowledge,
+    evaluate_knowledge, evaluate_support_outcomes, extract_document_text,
+    ingest_knowledge, list_knowledge,
     retrieve_knowledge,
 )
 from app.xima_governance import (
@@ -114,7 +116,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.16.0"
+VERSION = "2.17.0"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -175,6 +177,23 @@ MARKET_SOURCE_CONTRACT = [
     {"source": "exposure", "exchange_path": "/api/bot/risk/exposure", "status": "exchange_required"},
     {"source": "limits", "exchange_path": "/api/bot/risk/market-limits", "status": "exchange_required"},
 ]
+DOMAIN_SOURCE_CONTRACT = {
+    "aml_fraud": [
+        {"source": "cases", "exchange_path": "/api/bot/aml/cases", "status": "exchange_required"},
+        {"source": "case_evidence", "exchange_path": "/api/bot/aml/cases/{case_id}/evidence", "status": "exchange_required"},
+        {"source": "queue", "exchange_path": "/api/bot/aml/queue/summary", "status": "exchange_required"},
+    ],
+    "security": [
+        {"source": "events", "exchange_path": "/api/bot/security/events", "status": "exchange_required"},
+        {"source": "incidents", "exchange_path": "/api/bot/security/incidents", "status": "exchange_required"},
+        {"source": "privileged_activity", "exchange_path": "/api/bot/security/privileged-activity", "status": "exchange_required"},
+    ],
+    "support": [
+        {"source": "tickets", "exchange_path": "/api/bot/support/tickets", "status": "exchange_required"},
+        {"source": "outcomes", "exchange_path": "/api/bot/support/outcomes", "status": "exchange_required"},
+        {"source": "knowledge", "exchange_path": "/api/bot/knowledge/documents", "status": "exchange_required"},
+    ],
+}
 ROOT = Path(__file__).parent
 
 app = FastAPI(
@@ -964,6 +983,30 @@ async def xima_support_analyze(
         request.ticket_id, analysis,
     )
     return {"version": VERSION, "analysis": analysis}
+
+
+@app.post("/api/v0/xima/agents/support/outcomes/evaluate")
+async def xima_support_outcomes(
+    request: SupportOutcomeEvaluationRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    result = evaluate_support_outcomes(request)
+    result["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "support_outcome_evaluation",
+        datetime.now(UTC).isoformat(), result,
+    )
+    return {"version": VERSION, "evaluation": result}
+
+
+@app.get("/api/v0/xima/domain-sources")
+async def xima_domain_source_contract(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "domains": DOMAIN_SOURCE_CONTRACT, "all_live": False,
+            "limitation": "These exchange-owned routes are not in OpenAPI 0.8.0-pilot.",
+            "action_executed": False}
 
 
 @app.post("/api/v0/xima/governance/policy/evaluate")

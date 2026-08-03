@@ -81,6 +81,26 @@ class SupportTicketRequest(BaseModel):
     subject: str = Field(min_length=2, max_length=500)
     message: str = Field(min_length=2, max_length=10000)
     account_state: Literal["normal", "restricted", "under_review", "unknown"]
+    channel: Literal["email", "chat", "web", "phone", "social", "unknown"] = "unknown"
+    priority: Literal["low", "normal", "high", "urgent"] = "normal"
+    age_seconds: int = Field(default=0, ge=0)
+    sla_seconds: int | None = Field(default=None, gt=0)
+    prior_contact_count: int = Field(default=0, ge=0)
+
+
+class SupportOutcome(BaseModel):
+    ticket_id: str = Field(min_length=3, max_length=100)
+    draft_outcome: Literal["accepted", "edited", "rejected", "not_used"]
+    escalation_expected: bool
+    escalation_performed: bool
+    response_seconds: int = Field(ge=0)
+    resolution_seconds: int = Field(ge=0)
+    csat_score: int | None = Field(default=None, ge=1, le=5)
+
+
+class SupportOutcomeEvaluationRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=100)
+    outcomes: list[SupportOutcome] = Field(min_length=1, max_length=10000)
 
 
 class KnowledgeQuestionRequest(BaseModel):
@@ -421,7 +441,10 @@ def analyze_support(path: str, request: SupportTicketRequest, role: str) -> dict
         **common, "status": "ready", "confidence": "high" if citations else "limited",
         "severity": "high" if escalate else "normal",
         "classification": {"intent": intent, "urgent": urgent,
-                           "dissatisfaction": dissatisfaction, "escalate": escalate},
+                           "dissatisfaction": dissatisfaction, "escalate": escalate,
+                           "channel": request.channel, "priority": request.priority,
+                           "sla_breached": (request.sla_seconds is not None
+                                            and request.age_seconds > request.sla_seconds)},
         "redacted_ticket": {"subject": safe_subject, "message": safe_message},
         "draft": draft, "citations": citations,
         "human_review_required": True, "send_enabled": False,
@@ -431,3 +454,22 @@ def analyze_support(path: str, request: SupportTicketRequest, role: str) -> dict
             "Review the cited draft before any response."
         ),
     }
+
+
+def evaluate_support_outcomes(request: SupportOutcomeEvaluationRequest) -> dict:
+    count = len(request.outcomes)
+    escalation_correct = sum(
+        item.escalation_expected == item.escalation_performed for item in request.outcomes
+    )
+    with_csat = [item.csat_score for item in request.outcomes if item.csat_score is not None]
+    draft_counts = {state: sum(item.draft_outcome == state for item in request.outcomes)
+                    for state in ("accepted", "edited", "rejected", "not_used")}
+    return {"tenant_id": request.tenant_id, "status": "ready", "case_count": count,
+            "draft_outcomes": draft_counts,
+            "draft_acceptance_rate": round(draft_counts["accepted"] / count, 4),
+            "escalation_accuracy": round(escalation_correct / count, 4),
+            "average_response_seconds": round(sum(item.response_seconds for item in request.outcomes) / count, 2),
+            "average_resolution_seconds": round(sum(item.resolution_seconds for item in request.outcomes) / count, 2),
+            "average_csat": round(sum(with_csat) / len(with_csat), 2) if with_csat else None,
+            "limitations": ["Metrics reflect submitted minimized outcomes only."],
+            "action_executed": False}
