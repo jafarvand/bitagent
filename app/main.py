@@ -114,7 +114,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "2.15.0"
+VERSION = "2.16.0"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -165,6 +165,15 @@ OPERATIONS_SOURCE_CONTRACT = [
     {"source": "queues", "exchange_path": "/api/bot/queues/status", "status": "exchange_required"},
     {"source": "workers", "exchange_path": "/api/bot/workers/status", "status": "exchange_required"},
     {"source": "networks", "exchange_path": "/api/bot/networks/status", "status": "exchange_required"},
+]
+MARKET_SOURCE_CONTRACT = [
+    {"source": "markets", "exchange_path": "/api/bot/markets", "status": "exchange_required"},
+    {"source": "ticker", "exchange_path": "/api/bot/market/{market}/ticker", "status": "exchange_required"},
+    {"source": "order_book", "exchange_path": "/api/bot/market/{market}/order-book", "status": "exchange_required"},
+    {"source": "trades", "exchange_path": "/api/bot/market/{market}/trades", "status": "exchange_required"},
+    {"source": "candles", "exchange_path": "/api/bot/market/{market}/candles", "status": "exchange_required"},
+    {"source": "exposure", "exchange_path": "/api/bot/risk/exposure", "status": "exchange_required"},
+    {"source": "limits", "exchange_path": "/api/bot/risk/market-limits", "status": "exchange_required"},
 ]
 ROOT = Path(__file__).parent
 
@@ -780,6 +789,16 @@ async def xima_market_risk_analyze(
         request.market, analysis,
     )
     return {"version": VERSION, "analysis": analysis}
+
+
+@app.get("/api/v0/xima/agents/market-risk/source-contract")
+async def xima_market_source_contract(
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_xima", role)
+    return {"version": VERSION, "sources": MARKET_SOURCE_CONTRACT, "all_live": False,
+            "limitation": "These exchange-owned routes are not in OpenAPI 0.8.0-pilot.",
+            "action_executed": False}
 
 
 @app.post("/api/v0/xima/agents/treasury/analyze")

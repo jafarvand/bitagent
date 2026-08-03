@@ -50,7 +50,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "2.15.0"
+    assert response.json()["version"] == "2.16.0"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -63,7 +63,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=2.15.0' in response.text
+    assert '/static/app.js?v=2.16.0' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -101,7 +101,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=2.15.0-agents' in html
+    assert 'agent-chat.js?v=2.16.0-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -115,7 +115,7 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=2.15.0-knowledge' in html
+    assert 'knowledge.js?v=2.16.0-knowledge' in html
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -281,7 +281,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=2.15.0' in page.text
+    assert 'exchange-api-test.js?v=2.16.0' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -503,7 +503,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "2.15.0"
+    assert body["version"] == "2.16.0"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -637,7 +637,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "2.15.0",
+        "version": "2.16.0",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1170,7 +1170,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "2.15.0"
+    assert report["version"] == "2.16.0"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1265,7 +1265,7 @@ def test_1_0_candidate_is_blocked_when_any_gate_lacks_evidence():
     manifest = response.json()
 
     assert manifest["candidate_version"] == "1.0.0"
-    assert manifest["current_version"] == "2.15.0"
+    assert manifest["current_version"] == "2.16.0"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -2134,6 +2134,63 @@ def test_xima_market_agent_rejects_crossed_book_and_blocks_stale_evidence():
     assert blocked["status"] == "blocked"
     assert blocked["confidence"] == "none"
     assert crossed.status_code == 422
+
+
+def test_xima_market_package_validates_ticker_depth_trades_candles_exposure_and_limits():
+    observed = datetime.now(UTC).replace(microsecond=0)
+    result = client.post(
+        "/api/v0/xima/agents/market-risk/analyze",
+        headers={"X-BitAgent-Role": "operator"},
+        json={
+            "tenant_id": "exchange-a", "market": "BTC_USDT",
+            "observed_at": observed.isoformat(), "evidence_refs": ["market-package-1"],
+            "owner": "market-risk", "evidence_fresh": True, "conflicting_fields": [],
+            "bids": [{"price": "99.9", "quantity": "100"}, {"price": "99", "quantity": "200"}],
+            "asks": [{"price": "100.1", "quantity": "80"}, {"price": "101", "quantity": "180"}],
+            "recent_closes": ["99", "100", "101"], "current_volume": "1200",
+            "baseline_volume": "1000", "reference_price": "100",
+            "exposures": [{"asset": "BTC", "value": "90", "limit": "100",
+                           "counterparty_class": "custody", "valuation_source": "index-a",
+                           "valuation_unavailable": False}],
+            "book_sequence": 991, "snapshot_id": "book-991", "depth_bands_bps": [10, 50, 100],
+            "ticker": {"bid": "101.9", "ask": "102.1", "last": "102", "venue": "primary"},
+            "trades": [
+                {"trade_id": "t1", "occurred_at": (observed - timedelta(seconds=2)).isoformat(),
+                 "price": "100", "quantity": "9", "aggressor_side": "buy"},
+                {"trade_id": "t2", "occurred_at": (observed - timedelta(seconds=1)).isoformat(),
+                 "price": "100", "quantity": "1", "aggressor_side": "sell"},
+            ],
+            "candles": [
+                {"open_time": (observed - timedelta(minutes=3)).isoformat(), "interval_seconds": 60,
+                 "open": "99", "high": "101", "low": "98", "close": "100", "volume": "10", "complete": True},
+                {"open_time": (observed - timedelta(minutes=1)).isoformat(), "interval_seconds": 60,
+                 "open": "100", "high": "102", "low": "99", "close": "101", "volume": "12", "complete": False},
+            ],
+            "market_limits": [{"limit_id": "spread-watch", "scope": "BTC_USDT",
+                               "current_value": "90", "threshold": "100", "owner": "risk",
+                               "rationale": "Escalate before the approved spread ceiling."}],
+        },
+    ).json()["analysis"]
+
+    assert result["metrics"]["book_sequence"] == 991
+    assert result["metrics"]["depth_bands"]["10"] == {"bid": "9990.00", "ask": "8008.00"}
+    assert result["metrics"]["aggressor_imbalance_percent"] == "80.00"
+    assert result["metrics"]["candle_gap_count"] == 1
+    assert result["metrics"]["incomplete_candle_count"] == 1
+    assert result["metrics"]["ticker_book_deviation_bps"] == "200.00"
+    assert result["market_limits"][0]["state"] == "warning"
+    assert {item["type"] for item in result["findings"]} >= {
+        "ticker_book_divergence", "aggressor_imbalance", "candle_gaps", "market_limit"
+    }
+    assert not any("No normalized" in item for item in result["limitations"])
+
+    contract = client.get(
+        "/api/v0/xima/agents/market-risk/source-contract",
+        headers={"X-BitAgent-Role": "operator"},
+    ).json()
+    assert contract["all_live"] is False
+    assert len(contract["sources"]) == 7
+    assert all(item["status"] == "exchange_required" for item in contract["sources"])
 
 
 def test_xima_treasury_agent_calculates_coverage_thresholds_aging_and_reconciliation():

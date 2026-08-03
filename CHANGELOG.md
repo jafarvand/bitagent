@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [2.16.0] - 2026-08-02
+
+- Added normalized ticker, sequenced order-book, aggregate trade, candle, exposure-valuation, and governed market-limit evidence contracts.
+- Added multi-band depth, ticker/book divergence, aggressor imbalance, candle-gap, incomplete-candle, unavailable-valuation, concentration, and limit-utilization analysis.
+- Added a seven-source exchange contract manifest that keeps unavailable market/risk routes explicitly external.
+
 ## [2.15.0] - 2026-08-02
 
 - Expanded operations evidence contracts for dependency topology, queue inflow/outflow, failures, retries, dead letters, consumers, worker capacity, and blockchain-network state.

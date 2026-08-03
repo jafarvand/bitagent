@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **2.15.0 — Operations Topology and Root-Cause Intelligence**
+Current release: **2.16.0 — Market and Liquidity Intelligence Package**
 
 ## What the current release provides
 
@@ -215,7 +215,8 @@ answers score zero and are never omitted from the overall result.
 | 2.13.0 | Exchange API 0.8 contract validation, transaction intelligence, treasury reconciliation, and minimized user investigation | Complete |
 | 2.13.1 | Eight domain agent workspaces, partial-source investigation resilience, and staging exchange-team report | Complete |
 | 2.14.0 | Multi-format document processing, inventory, lifecycle governance, duplicate controls, and Q&A evaluation | Complete |
-| 2.15.0 | Dependency topology, queue/worker/network contracts, capacity correlation, and fail-closed root-cause hypotheses | Current |
+| 2.15.0 | Dependency topology, queue/worker/network contracts, capacity correlation, and fail-closed root-cause hypotheses | Complete |
+| 2.16.0 | Ticker, sequenced book, trade/candle quality, depth bands, divergence, exposure valuation, concentration, and limit utilization | Current |
 
 ## Project documents
 

@@ -14,6 +14,13 @@ FEATURES = [
         "description": "Correlates services, dependencies, queue rates, dead letters, workers, capacity and networks while labeling causal candidates as hypotheses.",
     },
     {
+        "id": "market-liquidity-package",
+        "name": "Normalized market and liquidity package",
+        "status": "available",
+        "source": "POST /api/v0/xima/agents/market-risk/analyze",
+        "description": "Validates books, tickers, trades and candles; measures depth bands, imbalance, gaps, divergence, exposure, concentration and governed limits.",
+    },
+    {
         "id": "readonly-chat",
         "name": "Read-only evidence chat",
         "status": "available",
