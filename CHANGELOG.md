@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [3.0.0-rc.3] - 2026-08-03
+
+- Added a formal bilingual catalog of the top 20 management questions across operations, executive, market/risk, treasury, AML/fraud, security, support, and governance.
+- Added tenant-scoped aggregation of the latest audited domain outputs and deterministic management answers with status, confidence, owner, evidence time/reference/hash, limitations, next action, and audit receipt.
+- Added an English/Persian Manager Intelligence workspace with domain filtering and a 40-case bilingual answer contract suite.
+
 ## [3.0.0-rc.2] - 2026-08-03
 
 - Added a persistent English/Persian language switch and shared translation runtime to every operator page, with complete document-level `lang`/`dir` switching and RTL layout rules.

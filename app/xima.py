@@ -260,6 +260,30 @@ def recent_xima_outputs(path: str, tenant_id: str, limit: int) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def latest_xima_output_payloads(path: str, tenant_id: str) -> dict[str, dict]:
+    """Return one latest audited aggregate payload per output type for internal analysis."""
+    with _connect(path) as connection:
+        rows = connection.execute(
+            """
+            SELECT o.* FROM xima_output_audit o
+            JOIN (
+                SELECT output_type, MAX(id) AS latest_id
+                FROM xima_output_audit WHERE tenant_id=? GROUP BY output_type
+            ) latest ON latest.latest_id=o.id
+            ORDER BY o.output_type
+            """,
+            (tenant_id,),
+        ).fetchall()
+    return {
+        row["output_type"]: {
+            "output_id": row["output_id"], "created_at": row["created_at"],
+            "entity_id": row["entity_id"], "payload_hash": row["payload_hash"],
+            "record_hash": row["record_hash"], "payload": json.loads(row["payload_json"]),
+        }
+        for row in rows
+    }
+
+
 def verify_xima_output_chain(path: str) -> dict:
     with _connect(path) as connection:
         rows = connection.execute("SELECT * FROM xima_output_audit ORDER BY id").fetchall()

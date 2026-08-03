@@ -27,10 +27,12 @@ from app.exchange_v08 import ExchangeContractError, validate_envelope
 from app.evidence import backup_and_verify, record_dashboard
 from app.main import app
 from app.market_risk import analyze_market_range
+from app.management import CATALOG, answer_management_question, management_question_catalog
 from app.ollama import OllamaClient
 from app.release_inputs import validate_release_inputs
 from scripts.evaluate_chat import question_set, score
 from app.pilot import build_pilot_manifest, load_pilot_evidence
+from app.xima import latest_xima_output_payloads, record_xima_output
 from app.xima_support import extract_document_text
 
 
@@ -55,7 +57,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "3.0.0-rc.2"
+    assert response.json()["version"] == "3.0.0-rc.3"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -68,7 +70,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=3.0.0-rc.2' in response.text
+    assert '/static/app.js?v=3.0.0-rc.3' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -106,7 +108,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=3.0.0-rc.2-agents' in html
+    assert 'agent-chat.js?v=3.0.0-rc.3-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -120,7 +122,7 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=3.0.0-rc.2-knowledge' in html
+    assert 'knowledge.js?v=3.0.0-rc.3-knowledge' in html
 
 
 def test_delivery_center_has_complete_dom_targets():
@@ -132,7 +134,7 @@ def test_delivery_center_has_complete_dom_targets():
     assert client.get("/delivery").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "SECURE EVENT AND REPORT DELIVERY" in html
-    assert 'delivery.js?v=3.0.0-rc.2-delivery' in html
+    assert 'delivery.js?v=3.0.0-rc.3-delivery' in html
     assert 'href="/delivery"' in client.get("/").text
 
 
@@ -145,19 +147,20 @@ def test_pilot_readiness_page_has_complete_dom_targets():
     assert client.get("/pilot-readiness").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "READ-ONLY PILOT RELEASE CANDIDATE" in html
-    assert 'pilot-readiness.js?v=3.0.0-rc.2' in html
+    assert 'pilot-readiness.js?v=3.0.0-rc.3' in html
     assert 'href="/pilot-readiness"' in client.get("/").text
 
 
 def test_every_operator_page_loads_shared_persian_rtl_runtime():
-    for path in ["/", "/agents", "/knowledge", "/delivery",
+    for path in ["/", "/agents", "/knowledge", "/delivery", "/manager",
                  "/pilot-readiness", "/exchange-api-test"]:
         html = client.get(path).text
-        assert 'i18n.js?v=3.0.0-rc.2-i18n' in html, path
+        assert 'i18n.js?v=3.0.0-rc.3-i18n' in html, path
     script = client.get("/static/i18n.js").text
     assert 'document.documentElement.dir=language==="fa"?"rtl":"ltr"' in script
     assert 'localStorage.setItem(STORAGE_KEY' in script
     assert 'button.textContent=language==="fa"?"English":"فارسی"' in script
+    assert '"MANAGER INTELLIGENCE":"هوش مدیریتی"' in script
 
 
 def test_persian_agent_catalog_is_fully_localized():
@@ -172,6 +175,133 @@ def test_persian_agent_catalog_is_fully_localized():
     assert all(len(agent["samples"]) == 3 for agent in catalog["agents"])
     assert all(any("\u0600" <= char <= "\u06ff" for char in sample)
                for agent in catalog["agents"] for sample in agent["samples"])
+
+
+def test_manager_workspace_has_complete_dom_targets_and_navigation():
+    html = client.get("/manager").text
+    script = client.get("/static/manager.js").text
+    html_ids = set(re.findall(r'id="([^"]+)"', html))
+    script_ids = set(re.findall(r'manager\("([^"]+)"\)', script))
+
+    assert client.get("/manager").status_code == 200
+    assert not sorted(script_ids - html_ids)
+    assert "Twenty questions" in html
+    assert 'manager.js?v=3.0.0-rc.3-manager' in html
+    assert 'href="/manager"' in client.get("/").text
+
+
+def test_management_catalog_has_exactly_twenty_bilingual_questions():
+    english = management_question_catalog("en")
+    persian = management_question_catalog("fa")
+
+    assert len(english) == len(persian) == len(CATALOG) == 20
+    assert [item["id"] for item in english] == [f"MQ-{index:02d}" for index in range(1, 21)]
+    assert all(item["question"] != other["question"]
+               for item, other in zip(english, persian, strict=True))
+    assert all(any("\u0600" <= char <= "\u06ff" for char in item["question"])
+               for item in persian)
+
+
+@pytest.mark.parametrize("question_id", [f"MQ-{index:02d}" for index in range(1, 21)])
+@pytest.mark.parametrize("language", ["en", "fa"])
+def test_all_forty_management_answers_are_deterministic_bounded_and_evidenced(
+    question_id, language
+):
+    now = datetime.now(UTC).isoformat()
+    outputs = {
+        output_type: {
+            "output_id": f"output-{output_type}", "created_at": now,
+            "payload_hash": hashlib.sha256(output_type.encode()).hexdigest(),
+            "payload": {"status": "ready", "severity": "healthy",
+                        "headline": f"{output_type} is ready", "owner": "domain-owner",
+                        "limitations": [], "recommended_next_action": "Continue monitoring."},
+        }
+        for output_type in {
+            "executive_brief", "operations_analysis", "market_risk_analysis",
+            "treasury_analysis", "aml_fraud_analysis", "security_analysis",
+            "support_analysis", "support_outcome_evaluation",
+        }
+    }
+    legacy = {
+        "generated_at": now, "evidence_record": {"id": 1, "hash": "a" * 64},
+        "operations": {"data": {"pending_withdrawals": 3}},
+        "market": {"data": {"market": "BTC_USDT", "last": "65000",
+                              "quote_asset": "USDT"}},
+        "market_risk": {"severity": "healthy", "confidence": "high",
+                        "data_quality": {"valid": True}, "limitations": []},
+        "investigation": {"supporting_evidence": {"pending_change": -2}},
+    }
+    pilot = {"decision": "blocked", "passed": 7, "total": 9, "approved": False,
+             "generated_at": now, "evidence_sha256": "b" * 64,
+             "blockers": [{"id": "steering-read-only-approval"}]}
+    context = {
+        "outputs": outputs, "legacy": legacy, "pilot": pilot,
+        "source_contracts": {"missing": ["/api/bot/queues/status"],
+                             "evidence": [{"source": "source-contract", "observed_at": now,
+                                           "owner": "platform-owner", "evidence_ref": "contract",
+                                           "evidence_hash": "c" * 64}]},
+        "gap_evidence": {"source": "gap", "observed_at": now,
+                         "owner": "domain-owner", "evidence_ref": question_id,
+                         "evidence_hash": "d" * 64},
+    }
+
+    result = answer_management_question(question_id, language, context)
+
+    assert result["question_id"] == question_id
+    assert result["language"] == language
+    assert result["status"] in {"answered", "partial", "blocked"}
+    assert result["answer"]
+    assert result["confidence"] in {"high", "limited", "insufficient", "none"}
+    assert result["owner"]
+    assert result["next_action"]
+    assert result["evidence"]
+    assert all(item["observed_at"] and item["evidence_ref"]
+               and len(item["evidence_hash"]) == 64 for item in result["evidence"])
+    assert result["action_executed"] is False
+    if language == "fa":
+        assert any("\u0600" <= char <= "\u06ff" for char in result["answer"])
+
+
+def test_latest_management_outputs_are_tenant_scoped():
+    record_xima_output(settings.evidence_db_path, "exchange-a", "security_analysis",
+                       "first", {"status": "ready", "severity": "healthy"})
+    record_xima_output(settings.evidence_db_path, "exchange-b", "security_analysis",
+                       "other", {"status": "blocked", "severity": "critical"})
+    record_xima_output(settings.evidence_db_path, "exchange-a", "security_analysis",
+                       "latest", {"status": "ready", "severity": "warning"})
+
+    own = latest_xima_output_payloads(settings.evidence_db_path, "exchange-a")
+    other = latest_xima_output_payloads(settings.evidence_db_path, "exchange-b")
+
+    assert own["security_analysis"]["entity_id"] == "latest"
+    assert own["security_analysis"]["payload"]["severity"] == "warning"
+    assert other["security_analysis"]["entity_id"] == "other"
+
+
+def test_management_answer_api_is_bilingual_audited_and_evidence_backed():
+    client.get("/api/v0/dashboard?market=BTC_USDT&days=30")
+    english = client.post(
+        "/api/v0/management/questions/answer",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "exchange-a", "question_id": "MQ-04", "language": "en"},
+    )
+    persian = client.post(
+        "/api/v0/management/questions/answer",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "exchange-a", "question_id": "MQ-04", "language": "fa"},
+    )
+
+    assert english.status_code == persian.status_code == 200
+    assert "42 pending withdrawals" in english.json()["result"]["answer"]
+    assert "42 برداشت معلق" in persian.json()["result"]["answer"]
+    for response in (english, persian):
+        result = response.json()["result"]
+        assert result["evidence"][0]["observed_at"]
+        assert len(result["evidence"][0]["evidence_hash"]) == 64
+        assert result["audit"]["output_id"]
+        assert result["owner"]
+        assert result["next_action"]
+        assert result["action_executed"] is False
 
 
 def test_knowledge_wizard_process_and_grounded_qa_flow():
@@ -337,7 +467,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=3.0.0-rc.2' in page.text
+    assert 'exchange-api-test.js?v=3.0.0-rc.3' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -559,7 +689,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "3.0.0-rc.2"
+    assert body["version"] == "3.0.0-rc.3"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -693,7 +823,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "3.0.0-rc.2",
+        "version": "3.0.0-rc.3",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1253,7 +1383,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "3.0.0-rc.2"
+    assert report["version"] == "3.0.0-rc.3"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1350,8 +1480,8 @@ def test_3_0_release_candidate_fails_closed_without_external_evidence():
     assert response.status_code == 200
     manifest = response.json()
 
-    assert manifest["candidate_version"] == "3.0.0-rc.2"
-    assert manifest["current_version"] == "3.0.0-rc.2"
+    assert manifest["candidate_version"] == "3.0.0-rc.3"
+    assert manifest["current_version"] == "3.0.0-rc.3"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1438,7 +1568,7 @@ def test_3_0_release_candidate_requires_complete_synthetic_evidence(tmp_path):
     (tmp_path / "pilot.local.json").write_text(json.dumps(package), encoding="utf-8")
     evidence = load_pilot_evidence(str(tmp_path))
     runtime = {
-        "current_version": "3.0.0-rc.2", "tenant_id": "exchange-a",
+        "current_version": "3.0.0-rc.3", "tenant_id": "exchange-a",
         "identity": {"status": "ready"},
         "access_reviews": [{"approved": True, "exception_count": 0,
                             "next_review_at": (now + timedelta(days=30)).isoformat()}],

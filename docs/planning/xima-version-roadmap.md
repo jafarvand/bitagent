@@ -35,6 +35,7 @@ training, or steering approval as software features.
 | `2.19.0` | Secure event and report delivery | Timestamped signed webhooks, idempotent routing, durable outbox, acknowledgements, report schedules and delivery posture | Complete |
 | `3.0.0-rc.1` | Read-only pilot release candidate | Consolidated runtime and external evidence gates, blocker receipt, exportable dashboard and unconditional controlled-action disablement | Complete; real pilot evidence pending |
 | `3.0.0-rc.2` | Bilingual Persian release candidate | Persistent language selection, shared UI translation, full RTL layout, Persian agent catalogs, evidence answers and refusals | Complete; real pilot evidence pending |
+| `3.0.0-rc.3` | Manager intelligence release candidate | Twenty bilingual questions, tenant-scoped domain aggregation, deterministic evidence metadata, manager workspace and forty-case evaluation | Complete; real pilot evidence pending |
 
 ## Definition of software completion
 

@@ -88,6 +88,10 @@ from app.marketing import (
     schedule_pilot,
     set_automation_pause,
 )
+from app.management import (
+    ManagementQuestionRequest, answer_management_question,
+    management_question_catalog,
+)
 from app.ollama import OllamaError, ollama_client
 from app.policy import evaluate_policy
 from app.release_inputs import validate_release_inputs
@@ -100,7 +104,8 @@ from app.readiness import (
 )
 from app.xima import (
     EvidenceEnvelope, ingest_evidence, recent_xima_outputs, record_xima_output,
-    replay_evidence, source_health, verify_xima_chain, verify_xima_output_chain,
+    latest_xima_output_payloads, replay_evidence, source_health,
+    verify_xima_chain, verify_xima_output_chain,
 )
 from app.xima_operations import OperationsAnalysisRequest, analyze_operations
 from app.xima_market import MarketRiskRequest as XimaMarketRiskRequest, analyze_market_risk as analyze_xima_market_risk
@@ -127,7 +132,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "3.0.0-rc.2"
+VERSION = "3.0.0-rc.3"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -342,6 +347,11 @@ async def delivery_workspace():
 @app.get("/pilot-readiness", include_in_schema=False)
 async def pilot_readiness_workspace():
     return FileResponse(ROOT / "static" / "pilot-readiness.html")
+
+
+@app.get("/manager", include_in_schema=False)
+async def manager_workspace():
+    return FileResponse(ROOT / "static" / "manager.html")
 
 
 @app.get("/api/v0/agents")
@@ -1230,6 +1240,60 @@ async def xima_executive_brief(
         request.reporting_period, brief,
     )
     return {"version": VERSION, "brief": brief}
+
+
+@app.get("/api/v0/management/questions")
+async def management_questions(
+    language: Literal["en", "fa"] = Query(default="en"),
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_brief", role)
+    items = management_question_catalog(language)
+    return {"version": VERSION, "language": language, "count": len(items),
+            "questions": items, "action_executed": False}
+
+
+@app.post("/api/v0/management/questions/answer")
+async def management_question_answer(
+    request: ManagementQuestionRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    authorize("view_brief", role)
+    legacy = build_chat_context(
+        settings.evidence_db_path, trend_limit=30,
+        freshness_warning_seconds=settings.evidence_freshness_warning_seconds,
+    )
+    pilot = await release_candidate(request.tenant_id, role)
+    contracts = OPERATIONS_SOURCE_CONTRACT + MARKET_SOURCE_CONTRACT + [
+        source for sources in DOMAIN_SOURCE_CONTRACT.values() for source in sources
+    ]
+    result = answer_management_question(
+        request.question_id, request.language,
+        {"legacy": legacy,
+         "outputs": latest_xima_output_payloads(settings.evidence_db_path, request.tenant_id),
+         "pilot": pilot,
+         "gap_evidence": {"source": "management_source_gap",
+                          "observed_at": datetime.now(UTC).isoformat(),
+                          "owner": "exchange data owner",
+                          "evidence_ref": request.question_id,
+                          "evidence_hash": hashlib.sha256(
+                              f"{request.tenant_id}:{request.question_id}".encode()
+                          ).hexdigest()},
+         "source_contracts": {
+             "missing": [item["exchange_path"] for item in contracts
+                         if item["status"] != "live"],
+             "evidence": [{"source": "upstream_source_contracts",
+                           "observed_at": datetime.now(UTC).isoformat(),
+                           "owner": "exchange platform", "evidence_ref": VERSION,
+                           "evidence_hash": hashlib.sha256(json.dumps(
+                               contracts, sort_keys=True).encode()).hexdigest()}],
+         }},
+    )
+    result["audit"] = record_xima_output(
+        settings.evidence_db_path, request.tenant_id, "management_answer",
+        request.question_id, result,
+    )
+    return {"version": VERSION, "result": result}
 
 
 @app.get("/api/v0/xima/integrations/exchange/health")
