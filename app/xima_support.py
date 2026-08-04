@@ -428,6 +428,22 @@ def _terms(value: str) -> set[str]:
     return terms
 
 
+def _best_excerpt(content: str, query_terms: set[str], limit: int = 900) -> str:
+    passages = [passage.strip() for passage in content.splitlines() if passage.strip()]
+    if len(passages) <= 1:
+        passages = [passage.strip() for passage in re.split(r"(?<=[.!؟])\s+", content)
+                    if passage.strip()]
+    ranked = sorted(
+        enumerate(passages),
+        key=lambda item: (len(query_terms & _terms(item[1])), len(item[1])),
+        reverse=True,
+    )
+    selected = sorted(index for index, passage in ranked[:3]
+                      if query_terms & _terms(passage))
+    excerpt = "\n".join(passages[index] for index in selected)
+    return (excerpt or content)[:limit]
+
+
 def retrieve_knowledge(path: str, tenant_id: str, role: str, query: str, limit: int = 5) -> list[dict]:
     query_terms = _terms(query)
     results = []
@@ -449,7 +465,7 @@ def retrieve_knowledge(path: str, tenant_id: str, role: str, query: str, limit: 
             "source_ref": item["source_ref"], "content_hash": item["content_hash"],
             "expires_at": item["expires_at"], "score": score,
             "matched_terms": matched_terms,
-            "excerpt": item["content"][:500],
+            "excerpt": _best_excerpt(item["content"], query_terms),
         })
     return sorted(results, key=lambda item: item["score"], reverse=True)[:limit]
 
