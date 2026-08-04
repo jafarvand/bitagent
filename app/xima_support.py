@@ -4,7 +4,10 @@ import io
 import json
 import re
 import sqlite3
+import unicodedata
 import zipfile
+from html.parser import HTMLParser
+from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,6 +54,19 @@ class KnowledgeUploadRequest(BaseModel):
     content_base64: str = Field(min_length=4, max_length=14_000_000)
 
 
+BITIMEN_TERMS_URL = "https://bitimen.com/terms/"
+BITIMEN_HOW_TO_USE_URL = "https://bitimen.com/how-to-use/"
+
+
+class BitimenTermsImportRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=100)
+    version: str = Field(default="1.0.0", pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
+    approval_status: Literal["draft", "approved"] = "approved"
+    allowed_roles: list[Literal["viewer", "operator", "auditor", "admin"]] = Field(
+        default_factory=lambda: ["operator", "admin"], min_length=1, max_length=4
+    )
+
+
 class KnowledgeStatusRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
     status: Literal["draft", "approved", "rejected", "superseded"]
@@ -67,6 +83,7 @@ class KnowledgeEvaluationRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
     cases: list[KnowledgeEvaluationCase] = Field(min_length=1, max_length=100)
     limit: int = Field(default=5, ge=1, le=20)
+    language: Literal["en", "fa"] = "en"
 
 
 class SupportTicketRequest(BaseModel):
@@ -107,6 +124,7 @@ class KnowledgeQuestionRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=100)
     question: str = Field(min_length=2, max_length=1000)
     limit: int = Field(default=5, ge=1, le=20)
+    language: Literal["en", "fa"] = "en"
 
 
 def _connect(path: str) -> sqlite3.Connection:
@@ -250,6 +268,70 @@ def extract_document_text(filename: str, encoded: str) -> tuple[str, dict]:
                         "chunks": chunk_knowledge(normalized)}
 
 
+class _PolicyHTMLParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "svg", "noscript"}:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "svg", "noscript"} and self._ignored_depth:
+            self._ignored_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._ignored_depth:
+            text = " ".join(data.split())
+            if text:
+                self.parts.append(text)
+
+
+def extract_policy_html(html: str) -> str:
+    parser = _PolicyHTMLParser()
+    parser.feed(html)
+    text = "\n".join(dict.fromkeys(parser.parts))
+    if len(text) < 100:
+        raise ValueError("policy page contains insufficient extractable text")
+    if len(text) > 100000:
+        raise ValueError("policy page exceeds 100000 extractable characters")
+    return text
+
+
+def fetch_bitimen_page(source_url: Literal[
+    "https://bitimen.com/terms/", "https://bitimen.com/how-to-use/"
+]) -> tuple[str, dict]:
+    request = Request(
+        source_url,
+        headers={"User-Agent": "bitAgent-knowledge-importer/1.0", "Accept": "text/html"},
+    )
+    with urlopen(request, timeout=20) as response:
+        content_type = response.headers.get_content_type()
+        raw = response.read(2_000_001)
+    if content_type != "text/html":
+        raise ValueError("Bitimen terms source did not return HTML")
+    if len(raw) > 2_000_000:
+        raise ValueError("Bitimen terms source exceeds 2 MB")
+    text = extract_policy_html(raw.decode("utf-8"))
+    return text, {
+        "source_url": source_url,
+        "processor": "allowlisted-html",
+        "bytes": len(raw),
+        "content_hash": hashlib.sha256(text.encode()).hexdigest(),
+        "chunks": chunk_knowledge(text),
+    }
+
+
+def fetch_bitimen_terms() -> tuple[str, dict]:
+    return fetch_bitimen_page(BITIMEN_TERMS_URL)
+
+
+def fetch_bitimen_how_to_use() -> tuple[str, dict]:
+    return fetch_bitimen_page(BITIMEN_HOW_TO_USE_URL)
+
+
 def list_knowledge(path: str, tenant_id: str, role: str, include_content: bool = False) -> list[dict]:
     now = datetime.now(UTC)
     with _connect(path) as connection:
@@ -317,8 +399,33 @@ def change_knowledge_status(path: str, document_id: str, version: str,
                  "exchange_write_performed": False}
 
 
+def _normalize_search_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    normalized = normalized.translate(str.maketrans({
+        "ي": "ی", "ى": "ی", "ك": "ک", "ۀ": "ه", "ة": "ه",
+        "ؤ": "و", "إ": "ا", "أ": "ا", "ٱ": "ا",
+        "\u200c": " ", "\u200d": " ", "ـ": "",
+    }))
+    return "".join(
+        character for character in normalized
+        if unicodedata.category(character) != "Mn"
+    )
+
+
 def _terms(value: str) -> set[str]:
-    return {term for term in re.findall(r"[a-z0-9]{3,}", value.lower())}
+    tokens = re.findall(r"[^\W_]+", _normalize_search_text(value), flags=re.UNICODE)
+    terms: set[str] = set()
+    persian_suffixes = ("هایمان", "هایتان", "هایشان", "هایی", "های", "ها")
+    for token in tokens:
+        minimum = 2 if re.search(r"[\u0600-\u06ff]", token) else 3
+        if len(token) < minimum:
+            continue
+        terms.add(token)
+        for suffix in persian_suffixes:
+            if token.endswith(suffix) and len(token) - len(suffix) >= 2:
+                terms.add(token[:-len(suffix)])
+                break
+    return terms
 
 
 def retrieve_knowledge(path: str, tenant_id: str, role: str, query: str, limit: int = 5) -> list[dict]:
@@ -335,11 +442,13 @@ def retrieve_knowledge(path: str, tenant_id: str, role: str, query: str, limit: 
         if not score:
             continue
         seen_documents.add(item["document_id"])
+        matched_terms = sorted(query_terms & searchable)
         results.append({
             "document_id": item["document_id"], "title": item["title"],
             "version": item["version"], "owner": item["owner"],
             "source_ref": item["source_ref"], "content_hash": item["content_hash"],
             "expires_at": item["expires_at"], "score": score,
+            "matched_terms": matched_terms,
             "excerpt": item["content"][:500],
         })
     return sorted(results, key=lambda item: item["score"], reverse=True)[:limit]
@@ -348,19 +457,35 @@ def retrieve_knowledge(path: str, tenant_id: str, role: str, query: str, limit: 
 def answer_knowledge_question(path: str, request: KnowledgeQuestionRequest, role: str) -> dict:
     citations = retrieve_knowledge(path, request.tenant_id, role, request.question, request.limit)
     if not citations:
+        persian = request.language == "fa" or bool(re.search(
+            r"[\u0600-\u06ff]", request.question
+        ))
         return {
             "status": "insufficient_evidence", "answer": None, "citations": [],
             "confidence": "none",
-            "limitations": ["No effective, approved, role-accessible document matched the question."],
+            "language": "fa" if persian else "en",
+            "limitations": [
+                "هیچ سند مؤثر، تأییدشده و قابل‌دسترسی برای نقش کاربر با این پرسش مطابقت نداشت."
+                if persian else
+                "No effective, approved, role-accessible document matched the question."
+            ],
             "human_review_required": True, "action_executed": False,
         }
     excerpts = "\n\n".join(
         f"[{item['title']} v{item['version']}] {item['excerpt']}" for item in citations
     )
+    persian = request.language == "fa" or bool(re.search(
+        r"[\u0600-\u06ff]", request.question
+    ))
     return {
         "status": "answered", "answer": excerpts, "citations": citations,
+        "language": "fa" if persian else "en",
         "confidence": "document_grounded",
-        "limitations": ["This is extractive guidance, not an exchange action or legal decision."],
+        "limitations": [
+            "این راهنمایی استخراجی است و عملیات صرافی یا تصمیم حقوقی محسوب نمی‌شود."
+            if persian else
+            "This is extractive guidance, not an exchange action or legal decision."
+        ],
         "human_review_required": True, "action_executed": False,
     }
 
@@ -385,6 +510,7 @@ def evaluate_knowledge(path: str, request: KnowledgeEvaluationRequest, role: str
                         "reciprocal_rank": 1 / min(ranks) if ranks else 0})
     count = len(results)
     return {"status": "passed" if hits == count else "needs_improvement",
+            "language": request.language,
             "case_count": count, "hit_count": hits,
             "hit_rate": round(hits / count, 4),
             "mean_reciprocal_rank": round(reciprocal_rank_total / count, 4),

@@ -57,7 +57,7 @@ def mock_mode(monkeypatch, tmp_path):
 def test_health_is_read_only_version_zero_line():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["version"] == "3.0.0-rc.3"
+    assert response.json()["version"] == "3.0.0-rc.4"
 
 
 def test_dashboard_exposes_both_live_refresh_controls():
@@ -70,7 +70,7 @@ def test_dashboard_exposes_both_live_refresh_controls():
     assert 'id="chat-form"' in response.text
     assert 'id="chat-messages"' in response.text
     assert 'id="freshness-summary"' in response.text
-    assert '/static/app.js?v=3.0.0-rc.3' in response.text
+    assert '/static/app.js?v=3.0.0-rc.4' in response.text
 
     script = client.get("/static/app.js").text
     assert 'marketDataValid ? number(market.last) : "Unavailable"' in script
@@ -108,7 +108,7 @@ def test_eight_agent_chat_pages_have_samples_and_complete_dom_targets():
     html_ids = set(re.findall(r'id="([^"]+)"', html))
     script_ids = set(re.findall(r'el\("([^"]+)"\)', script))
     assert not sorted(script_ids - html_ids)
-    assert 'agent-chat.js?v=3.0.0-rc.3-agents' in html
+    assert 'agent-chat.js?v=3.0.0-rc.4-agents' in html
     assert client.get("/agents/not-an-agent").status_code == 404
 
 
@@ -121,8 +121,12 @@ def test_knowledge_wizard_has_complete_dom_targets():
     assert client.get("/knowledge").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "DOCUMENT WIZARD" in html
+    assert "Bitimen knowledge sources" in html
+    assert 'importBitimenSource("bitimen-terms"' in script
+    assert 'importBitimenSource("bitimen-how-to-use"' in script
+    assert "/api/v0/xima/knowledge/sources/${source}/import" in script
     assert "Test document Q&amp;A" in html
-    assert 'knowledge.js?v=3.0.0-rc.3-knowledge' in html
+    assert 'knowledge.js?v=3.0.0-rc.4-knowledge' in html
 
 
 def test_delivery_center_has_complete_dom_targets():
@@ -134,7 +138,7 @@ def test_delivery_center_has_complete_dom_targets():
     assert client.get("/delivery").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "SECURE EVENT AND REPORT DELIVERY" in html
-    assert 'delivery.js?v=3.0.0-rc.3-delivery' in html
+    assert 'delivery.js?v=3.0.0-rc.4-delivery' in html
     assert 'href="/delivery"' in client.get("/").text
 
 
@@ -147,7 +151,7 @@ def test_pilot_readiness_page_has_complete_dom_targets():
     assert client.get("/pilot-readiness").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "READ-ONLY PILOT RELEASE CANDIDATE" in html
-    assert 'pilot-readiness.js?v=3.0.0-rc.3' in html
+    assert 'pilot-readiness.js?v=3.0.0-rc.4' in html
     assert 'href="/pilot-readiness"' in client.get("/").text
 
 
@@ -155,7 +159,7 @@ def test_every_operator_page_loads_shared_persian_rtl_runtime():
     for path in ["/", "/agents", "/knowledge", "/delivery", "/manager",
                  "/pilot-readiness", "/exchange-api-test"]:
         html = client.get(path).text
-        assert 'i18n.js?v=3.0.0-rc.3-i18n' in html, path
+        assert 'i18n.js?v=3.0.0-rc.4-i18n' in html, path
     script = client.get("/static/i18n.js").text
     assert 'document.documentElement.dir=language==="fa"?"rtl":"ltr"' in script
     assert 'localStorage.setItem(STORAGE_KEY' in script
@@ -186,7 +190,7 @@ def test_manager_workspace_has_complete_dom_targets_and_navigation():
     assert client.get("/manager").status_code == 200
     assert not sorted(script_ids - html_ids)
     assert "Twenty questions" in html
-    assert 'manager.js?v=3.0.0-rc.3-manager' in html
+    assert 'manager.js?v=3.0.0-rc.4-manager' in html
     assert 'href="/manager"' in client.get("/").text
 
 
@@ -406,6 +410,134 @@ def test_knowledge_upload_inventory_duplicate_evaluation_and_supersession():
     assert after["status"] == "insufficient_evidence"
 
 
+def test_persian_knowledge_normalization_qa_and_evaluation():
+    metadata = {
+        "tenant_id": "persian-exchange", "document_id": "fa-identity-policy",
+        "title": "سیاست احراز هویت کاربران", "document_type": "policy",
+        "version": "1.0.0", "owner": "امنیت", "approval_status": "approved",
+        "approved_by_role": "security", "effective_at": "2026-01-01T00:00:00Z",
+        "expires_at": "2099-01-01T00:00:00Z", "data_class": "internal",
+        "allowed_roles": ["operator", "admin"],
+        "keywords": ["احراز هویت", "کاربران", "ورود دومرحله‌ای"],
+        "source_ref": "policy:fa-identity",
+    }
+    content = (
+        "تمام کاربران برای ورود به سامانه باید احراز هویت دومرحله‌ای را فعال کنند. "
+        "دسترسی ممتاز بدون تأیید مالک امنیت مجاز نیست."
+    )
+    uploaded = client.post(
+        "/api/v0/xima/knowledge/documents/upload",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"document": metadata, "filename": "سیاست-هویت.md",
+              "content_base64": base64.b64encode(content.encode()).decode()},
+    )
+    answered = client.post(
+        "/api/v0/xima/knowledge/qa",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "persian-exchange", "language": "fa",
+              "question": "سياست احراز هويت كاربران و ورود دومرحله‌ای چیست؟"},
+    )
+    evaluated = client.post(
+        "/api/v0/xima/knowledge/evaluations",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"tenant_id": "persian-exchange", "language": "fa", "cases": [{
+            "question": "برای کاربران چه نوع احراز هویتی لازم است؟",
+            "expected_document_ids": ["fa-identity-policy"],
+        }]},
+    )
+    missing = client.post(
+        "/api/v0/xima/knowledge/qa",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "persian-exchange", "language": "fa",
+              "question": "مالیات شرکت در کشور دیگری چگونه محاسبه می‌شود؟"},
+    ).json()["result"]
+
+    assert uploaded.status_code == 201
+    result = answered.json()["result"]
+    assert result["status"] == "answered"
+    assert result["language"] == "fa"
+    assert "احراز هویت دومرحله‌ای" in result["answer"]
+    assert result["citations"][0]["document_id"] == "fa-identity-policy"
+    assert "احراز" in result["citations"][0]["matched_terms"]
+    assert "تصمیم حقوقی" in result["limitations"][0]
+    evaluation = evaluated.json()["evaluation"]
+    assert evaluation["status"] == "passed"
+    assert evaluation["language"] == "fa"
+    assert evaluation["hit_rate"] == evaluation["mean_reciprocal_rank"] == 1.0
+    assert missing["status"] == "insufficient_evidence"
+    assert missing["language"] == "fa"
+    assert "هیچ سند" in missing["limitations"][0]
+
+
+def test_bitimen_terms_allowlisted_source_imports_into_persian_rag(monkeypatch):
+    policy = (
+        "قوانین و مقررات بیت ایمن\n"
+        "کاربران موظف هستند پیش از استفاده از خدمات، احراز هویت خود را تکمیل کنند.\n"
+        "برداشت دارایی فقط پس از بررسی‌های امنیتی و تأیید اطلاعات حساب انجام می‌شود.\n"
+        "مسئولیت نگهداری امن اطلاعات ورود بر عهده کاربر است."
+    )
+    monkeypatch.setattr(
+        "app.main.fetch_bitimen_terms",
+        lambda: (policy, {"source_url": "https://bitimen.com/terms/",
+                          "processor": "allowlisted-html", "bytes": len(policy.encode()),
+                          "content_hash": hashlib.sha256(policy.encode()).hexdigest(),
+                          "chunks": []}),
+    )
+    imported = client.post(
+        "/api/v0/xima/knowledge/sources/bitimen-terms/import",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"tenant_id": "bitimen-policy-test", "version": "1.0.0"},
+    )
+    answered = client.post(
+        "/api/v0/xima/knowledge/qa",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "bitimen-policy-test", "language": "fa",
+              "question": "قانون احراز هويت كاربران چیست؟"},
+    )
+
+    assert imported.status_code == 200
+    assert imported.json()["status"] == "imported"
+    assert imported.json()["document"]["document_id"] == "bitimen-terms-fa"
+    result = answered.json()["result"]
+    assert result["status"] == "answered"
+    assert result["citations"][0]["source_ref"] == "https://bitimen.com/terms/"
+    assert "احراز هویت" in result["answer"]
+
+
+def test_bitimen_customer_support_source_answers_support_questions(monkeypatch):
+    guide = (
+        "راهنمای استفاده و پشتیبانی بیت ایمن\n"
+        "کاربر می‌تواند پس از خرید، فروش، واریز یا برداشت، تراکنش‌های خود را پیگیری کند.\n"
+        "برای شارژ کیف پول ابتدا فرایند واریز تومان را تکمیل کنید.\n"
+        "پس از ثبت نام و احراز هویت، رمز دوعاملی را برای امنیت حساب فعال کنید."
+    )
+    monkeypatch.setattr(
+        "app.main.fetch_bitimen_how_to_use",
+        lambda: (guide, {"source_url": "https://bitimen.com/how-to-use/",
+                         "processor": "allowlisted-html", "bytes": len(guide.encode()),
+                         "content_hash": hashlib.sha256(guide.encode()).hexdigest(),
+                         "chunks": []}),
+    )
+    imported = client.post(
+        "/api/v0/xima/knowledge/sources/bitimen-how-to-use/import",
+        headers={"X-BitAgent-Role": "admin"},
+        json={"tenant_id": "bitimen-support-test", "version": "1.0.0"},
+    )
+    answered = client.post(
+        "/api/v0/xima/knowledge/qa",
+        headers={"X-BitAgent-Role": "operator"},
+        json={"tenant_id": "bitimen-support-test", "language": "fa",
+              "question": "چگونه تراكنش برداشت خود را پيگيری كنم؟"},
+    )
+
+    assert imported.status_code == 200
+    assert imported.json()["document"]["document_id"] == "bitimen-how-to-use-fa"
+    result = answered.json()["result"]
+    assert result["status"] == "answered"
+    assert result["citations"][0]["source_ref"] == "https://bitimen.com/how-to-use/"
+    assert "پیگیری" in result["answer"]
+
+
 def test_docx_processing_extracts_text_and_rejects_unsupported_files():
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
@@ -467,7 +599,7 @@ def test_exchange_api_test_page_lists_every_documented_read_endpoint():
 
     assert page.status_code == 200
     assert 'id="api-run-all"' in page.text
-    assert 'exchange-api-test.js?v=3.0.0-rc.3' in page.text
+    assert 'exchange-api-test.js?v=3.0.0-rc.4' in page.text
     assert catalog["exchange_api_version"] == "0.8.0-pilot"
     assert len(catalog["tests"]) == 14
     assert catalog["credentials_exposed"] is False
@@ -689,7 +821,7 @@ def test_chat_health_reports_safe_dependency_state_without_secrets():
         headers={"X-BitAgent-Role": "operator"},
     ).json()
 
-    assert body["version"] == "3.0.0-rc.3"
+    assert body["version"] == "3.0.0-rc.4"
     assert body["status"] == "operational"
     assert body["read_only"] is True
     assert body["deterministic_answers_available"] is True
@@ -823,7 +955,7 @@ def test_feedback_is_local_append_only_and_never_writes_exchange():
     assert body["exchange_write_performed"] is False
     assert "Threshold needs owner review." not in str(body)
     assert summary == {
-        "version": "3.0.0-rc.3",
+        "version": "3.0.0-rc.4",
         "total": 1,
         "counts": {"needs_correction": 1},
     }
@@ -1383,7 +1515,7 @@ def test_readiness_report_is_evidence_based_and_not_false_go_live():
         headers={"X-BitAgent-Role": "auditor"},
     ).json()
 
-    assert report["version"] == "3.0.0-rc.3"
+    assert report["version"] == "3.0.0-rc.4"
     assert report["security"]["all_passed"] is True
     assert report["security"]["refusal_percent"] == 100
     assert report["uat"]["decision"] == "not_ready_for_1_0_pilot"
@@ -1480,8 +1612,8 @@ def test_3_0_release_candidate_fails_closed_without_external_evidence():
     assert response.status_code == 200
     manifest = response.json()
 
-    assert manifest["candidate_version"] == "3.0.0-rc.3"
-    assert manifest["current_version"] == "3.0.0-rc.3"
+    assert manifest["candidate_version"] == "3.0.0-rc.4"
+    assert manifest["current_version"] == "3.0.0-rc.4"
     assert manifest["decision"] == "blocked"
     assert manifest["approved"] is False
     assert manifest["blockers"]
@@ -1568,7 +1700,7 @@ def test_3_0_release_candidate_requires_complete_synthetic_evidence(tmp_path):
     (tmp_path / "pilot.local.json").write_text(json.dumps(package), encoding="utf-8")
     evidence = load_pilot_evidence(str(tmp_path))
     runtime = {
-        "current_version": "3.0.0-rc.3", "tenant_id": "exchange-a",
+        "current_version": "3.0.0-rc.4", "tenant_id": "exchange-a",
         "identity": {"status": "ready"},
         "access_reviews": [{"approved": True, "exception_count": 0,
                             "next_review_at": (now + timedelta(days=30)).isoformat()}],

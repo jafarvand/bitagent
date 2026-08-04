@@ -113,11 +113,14 @@ from app.xima_treasury import TreasuryAnalysisRequest, analyze_treasury
 from app.xima_aml import AMLAnalysisRequest, AMLFeedbackRequest, analyze_aml, record_aml_feedback
 from app.xima_security import SecurityAnalysisRequest, analyze_security
 from app.xima_support import (
-    KnowledgeDocumentRequest, KnowledgeEvaluationRequest, KnowledgeQuestionRequest,
+    BITIMEN_HOW_TO_USE_URL, BITIMEN_TERMS_URL, BitimenTermsImportRequest,
+    KnowledgeDocumentRequest,
+    KnowledgeEvaluationRequest, KnowledgeQuestionRequest,
     KnowledgeStatusRequest, KnowledgeUploadRequest, SupportOutcomeEvaluationRequest,
     SupportTicketRequest,
     analyze_support, answer_knowledge_question, change_knowledge_status,
     evaluate_knowledge, evaluate_support_outcomes, extract_document_text,
+    fetch_bitimen_how_to_use, fetch_bitimen_terms,
     ingest_knowledge, list_knowledge,
     retrieve_knowledge,
 )
@@ -132,7 +135,7 @@ from app.xima_actions import (
 )
 from app.xima_executive import ExecutiveBriefRequest, build_executive_brief
 
-VERSION = "3.0.0-rc.3"
+VERSION = "3.0.0-rc.4"
 EXCHANGE_API_VERSION = "0.8.0-pilot"
 EXCHANGE_VERSION_COVERAGE = [
     {"version": "0.1", "status": "rejected", "capability": "Bearer secret on wire", "evidence": "Superseded as insecure; never enabled"},
@@ -1008,6 +1011,74 @@ async def xima_knowledge_upload(
     if status_code >= 400:
         raise HTTPException(status_code=status_code, detail=result)
     return {"version": VERSION, "document": result, "processing": processing}
+
+
+@app.post("/api/v0/xima/knowledge/sources/bitimen-terms/import")
+async def xima_knowledge_import_bitimen_terms(
+    request: BitimenTermsImportRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_xima_knowledge", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "knowledge_role_denied"})
+    return await _import_bitimen_source(request, "terms")
+
+
+@app.post("/api/v0/xima/knowledge/sources/bitimen-how-to-use/import")
+async def xima_knowledge_import_bitimen_how_to_use(
+    request: BitimenTermsImportRequest,
+    role: str | None = Header(default=None, alias="X-BitAgent-Role"),
+):
+    decision = authorize("manage_xima_knowledge", role)
+    if not decision["allowed"]:
+        raise HTTPException(status_code=403, detail={"code": "knowledge_role_denied"})
+    return await _import_bitimen_source(request, "how-to-use")
+
+
+async def _import_bitimen_source(
+    request: BitimenTermsImportRequest, source: Literal["terms", "how-to-use"]
+):
+    support_source = source == "how-to-use"
+    fetcher = fetch_bitimen_how_to_use if support_source else fetch_bitimen_terms
+    source_url = BITIMEN_HOW_TO_USE_URL if support_source else BITIMEN_TERMS_URL
+    try:
+        content, processing = await asyncio.to_thread(fetcher)
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "knowledge_source_fetch_failed", "message": str(exc)},
+        ) from exc
+    now = datetime.now(UTC)
+    document = KnowledgeDocumentRequest(
+        tenant_id=request.tenant_id,
+        document_id="bitimen-how-to-use-fa" if support_source else "bitimen-terms-fa",
+        title="راهنمای استفاده و پشتیبانی بیت ایمن" if support_source else "قوانین و مقررات بیت ایمن",
+        document_type="product" if support_source else "policy",
+        version=request.version,
+        owner="bitimen-support" if support_source else "bitimen-compliance",
+        approval_status=request.approval_status,
+        approved_by_role="compliance" if request.approval_status == "approved" else None,
+        effective_at=now,
+        expires_at=now + timedelta(days=3650),
+        data_class="public",
+        allowed_roles=request.allowed_roles,
+        keywords=(
+            ["بیت ایمن", "راهنمای استفاده", "پشتیبانی", "ثبت نام", "احراز هویت",
+             "رمز دوعاملی", "شارژ کیف پول", "معامله", "برداشت", "پیگیری تراکنش"]
+            if support_source else
+            ["بیت ایمن", "قوانین", "مقررات", "کاربر", "احراز هویت", "برداشت"]
+        ),
+        source_ref=source_url,
+        content=content,
+    )
+    status_code, result = ingest_knowledge(settings.evidence_db_path, document)
+    if status_code == 409 and result.get("code") == "knowledge_duplicate_content":
+        return {"version": VERSION, "status": "unchanged", "document": result,
+                "processing": processing, "action_executed": False}
+    if status_code >= 400:
+        raise HTTPException(status_code=status_code, detail=result)
+    return {"version": VERSION, "status": "imported", "document": result,
+            "processing": processing, "action_executed": False}
 
 
 @app.get("/api/v0/xima/knowledge/documents")

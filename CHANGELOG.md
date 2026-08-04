@@ -2,6 +2,12 @@
 
 All notable bitAgent changes are recorded here.
 
+## [3.0.0-rc.4] - 2026-08-04
+
+- Added allow-listed Bitimen importers for terms and customer-support guidance from `https://bitimen.com/terms/` and `https://bitimen.com/how-to-use/`, with bounded fetching, HTML cleanup, hashes, chunks, tenant governance, citations, and idempotent refresh behavior.
+- Added Unicode-aware Persian retrieval, Arabic/Persian character normalization, Persian grounded-answer limitations, and language-aware knowledge evaluations.
+- Added connected-source controls to the knowledge wizard and end-to-end Persian ingestion, retrieval, evaluation, policy-source, and customer-support-source tests.
+
 ## [3.0.0-rc.3] - 2026-08-03
 
 - Added a formal bilingual catalog of the top 20 management questions across operations, executive, market/risk, treasury, AML/fraud, security, support, and governance.

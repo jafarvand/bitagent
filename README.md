@@ -2,7 +2,7 @@
 
 Read-only Exchange Operations & Risk Copilot.
 
-Current release: **3.0.0-rc.3 — Bilingual Manager Intelligence Release Candidate**
+Current release: **3.0.0-rc.4 — Persian Governed Knowledge Release Candidate**
 
 ## What the current release provides
 
@@ -229,7 +229,8 @@ answers score zero and are never omitted from the overall result.
 | 2.19.0 | Timestamped signed events, idempotent routing, durable outbox, acknowledgements, report schedules, and delivery posture | Complete |
 | 3.0.0-rc.1 | Nine-gate read-only pilot manifest, evidence package validation, blocker dashboard, and fail-closed eligibility | Complete |
 | 3.0.0-rc.2 | English/Persian UI, complete RTL mode, localized agents, and Persian evidence/safety answers | Complete |
-| 3.0.0-rc.3 | Top-20 bilingual manager catalog, cross-domain aggregation, deterministic evidence answers, and 40-case evaluation | Current RC; external gates pending |
+| 3.0.0-rc.3 | Top-20 bilingual manager catalog, cross-domain aggregation, deterministic evidence answers, and 40-case evaluation | Complete |
+| 3.0.0-rc.4 | Persian knowledge retrieval/evaluation plus governed Bitimen terms and customer-support ingestion | Current RC; external gates pending |
 
 ## Project documents
 
@@ -239,7 +240,7 @@ answers score zero and are never omitted from the overall result.
 - [Remaining XIMA version roadmap](docs/planning/xima-version-roadmap.md)
 - [Detailed exchange-side API and platform requirements](docs/integration/exchange-side-requirements.md)
 - [XIMA software completion and external-gate matrix](docs/releases/xima-completion-matrix.md)
-- [3.0.0-rc.3 bilingual manager and pilot evidence gates](docs/releases/3.0-read-only-pilot-rc.md)
+- [3.0.0-rc.4 Persian knowledge and pilot evidence gates](docs/releases/3.0-read-only-pilot-rc.md)
 - [Platform security and operations baseline](docs/security/platform-baseline.md)
 - [Master operations runbook](docs/runbooks/master-runbook.md)
 - [Architecture](docs/architecture/version-0.md)
