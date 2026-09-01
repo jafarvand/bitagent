@@ -80,13 +80,15 @@ jobs:
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   container-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build --tag bitagent:ci .
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: bitagent:ci
           format: table

@@ -8,6 +8,7 @@ __pycache__/
 htmlcov/
 .bitagent-server*.log
 .data/
+data/options/
 integration-input/release-evidence/*.local.json
 dist/
 build/

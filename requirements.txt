@@ -1,7 +1,8 @@
-fastapi==0.116.1
+fastapi==0.141.1
 httpx==0.28.1
 uvicorn[standard]==0.35.0
 pydantic-settings==2.10.1
-pytest==8.4.1
-pypdf==5.9.0
-PyJWT[crypto]==2.10.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pypdf==6.16.2
+PyJWT[crypto]==2.13.0
